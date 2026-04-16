@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>자금 이상거래 감지 시스템</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#dddbd3;--border2:#c8c6bc;--text:#1a1917;--text2:#6b6860;--text3:#9b9890;--danger-bg:#fff0ee;--danger:#c0392b;--danger-border:#f5c6c0;--warning-bg:#fff8ec;--warning:#9a6200;--warning-border:#f5e0a0;--ok-bg:#eef7f0;--ok:#1e6e3a;--ok-border:#b8e0c4;--mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+.app{display:flex;min-height:100vh}
+.sidebar{width:220px;min-width:220px;background:var(--text);color:#fff;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar-logo{padding:24px 20px 18px;border-bottom:1px solid rgba(255,255,255,0.1)}
+.sidebar-logo .logo-mark{font-family:var(--mono);font-size:10px;letter-spacing:0.15em;color:rgba(255,255,255,0.35);margin-bottom:6px;text-transform:uppercase}
+.sidebar-logo h2{font-size:13px;font-weight:500;color:#fff;line-height:1.4}
+.sidebar-user{padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:8px}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0}
+.user-info .user-name{font-size:12px;font-weight:500;color:#fff}
+.user-info .user-role{font-size:10px;color:rgba(255,255,255,0.4);font-family:var(--mono)}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-section{padding:8px 16px 3px;font-size:10px;letter-spacing:0.12em;color:rgba(255,255,255,0.28);text-transform:uppercase;font-family:var(--mono)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:13px;transition:all 0.15s;border-left:2px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.85)}
+.nav-item.active{color:#fff;border-left-color:#fff;background:rgba(255,255,255,0.08)}
+.nav-icon{width:16px;text-align:center;font-size:13px}
+.sidebar-footer{padding:12px 20px;border-top:1px solid rgba(255,255,255,0.08)}
+.btn-logout{width:100%;padding:8px;border:1px solid rgba(255,255,255,0.15);border-radius:6px;background:transparent;color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all 0.15s}
+.btn-logout:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85)}
+.main{margin-left:220px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-title{font-size:14px;font-weight:500}
+.topbar-meta{font-size:12px;color:var(--text3);font-family:var(--mono)}
+.content{padding:28px 32px;flex:1}
+.page{display:none}
+.page.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:22px;margin-bottom:18px}
+.card-title{font-size:11px;font-weight:500;color:var(--text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.upload-zone{border:1.5px dashed var(--border2);border-radius:8px;padding:44px 24px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--surface2)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--text);background:#eeecd8}
+.upload-zone .upload-icon{font-size:32px;margin-bottom:10px}
+.upload-zone .upload-title{font-size:15px;font-weight:500;margin-bottom:5px}
+.upload-zone .upload-hint{font-size:12px;color:var(--text3)}
+.form-row{display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:11px;color:var(--text2);font-weight:500;letter-spacing:0.03em;text-transform:uppercase}
+.form-group input,.form-group select{height:38px;padding:0 12px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);font-size:13px;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color 0.15s}
+.form-group input:focus,.form-group select:focus{border-color:var(--text)}
+.form-group input{width:210px}
+.btn{height:38px;padding:0 16px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);font-size:13px;cursor:pointer;color:var(--text);font-family:'Noto Sans KR',sans-serif;transition:all 0.15s;white-space:nowrap}
+.btn:hover{background:var(--surface2)}
+.btn-dark{background:var(--text);color:#fff;border-color:var(--text)}
+.btn-dark:hover{opacity:.85;background:var(--text)}
+.btn-sm{height:30px;padding:0 12px;font-size:12px}
+.btn-danger-outline{border-color:var(--danger);color:var(--danger)}
+.btn-danger-outline:hover{background:var(--danger-bg)}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+.metric-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.metric-card .m-label{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:0.05em;margin-bottom:5px;text-transform:uppercase}
+.metric-card .m-value{font-size:26px;font-weight:300;line-height:1;font-family:var(--mono)}
+.metric-card.danger .m-value{color:var(--danger)}
+.metric-card.warning .m-value{color:var(--warning)}
+.metric-card.ok .m-value{color:var(--ok)}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--surface2);padding:9px 14px;text-align:left;font-weight:500;font-size:10px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;font-family:var(--mono);letter-spacing:0.04em;text-transform:uppercase}
+td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf6}
+.badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:500;font-family:var(--mono);letter-spacing:0.03em}
+.badge-danger{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-border)}
+.badge-warning{background:var(--warning-bg);color:var(--warning);border:1px solid var(--warning-border)}
+.badge-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)}
+.badge-admin{background:#e8e4f8;color:#4a3b9e;border:1px solid #c8bff0}
+.reason-tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px;color:var(--text2);margin:1px 2px 1px 0}
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.filter-bar input[type=text]{height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);font-size:13px;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none;width:200px}
+.filter-bar input[type=text]:focus{border-color:var(--text)}
+.filter-bar select{height:36px;padding:0 10px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);font-size:13px;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none}
+.preview-info{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.preview-label{font-size:12px;color:var(--text2);font-family:var(--mono)}
+.progress-overlay{display:none;position:fixed;inset:0;background:rgba(26,25,23,0.5);z-index:200;align-items:center;justify-content:center}
+.progress-overlay.active{display:flex}
+.progress-box{background:var(--surface);border-radius:12px;padding:36px 44px;text-align:center;min-width:300px}
+.progress-box h3{font-size:15px;font-weight:500;margin-bottom:6px}
+.progress-box p{font-size:13px;color:var(--text2);margin-bottom:18px}
+.progress-bar{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--text);border-radius:2px;transition:width 0.4s ease}
+.corp-list{list-style:none}
+.corp-list li{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px}
+.corp-list li:last-child{border-bottom:none}
+.empty{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty p{font-size:14px}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;z-index:999;transform:translateY(80px);opacity:0;transition:all 0.25s ease;max-width:340px}
+.toast.show{transform:translateY(0);opacity:1}
+/* modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(26,25,23,0.45);z-index:300;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:var(--surface);border-radius:10px;padding:28px;min-width:360px;max-width:440px;width:90%}
+.modal h3{font-size:15px;font-weight:500;margin-bottom:18px}
+.modal .form-group{margin-bottom:14px}
+.modal .form-group label{text-transform:none;letter-spacing:0;font-size:12px;margin-bottom:4px}
+.modal .form-group input,.modal .form-group select{width:100%;height:40px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.modal-error{font-size:12px;color:var(--danger);margin-top:6px;display:none}
+/* audit */
+.audit-log{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11px;color:var(--text2);max-height:360px;overflow-y:auto;line-height:1.8}
+.audit-log .log-danger{color:var(--danger)}
+.audit-log .log-ok{color:var(--ok)}
+/* pw change */
+.pw-section{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+.pw-section h4{font-size:13px;font-weight:500;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">FDS v1.0</div>
+      <h2>자금 이상거래<br>감지 시스템</h2>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name-display">{{ username }}</div>
+        <div class="user-role" id="user-role-display">{{ role }}</div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">분석</div>
+      <div class="nav-item active" onclick="nav('upload')"><span class="nav-icon">↑</span> 거래 업로드</div>
+      <div class="nav-item" onclick="nav('result')"><span class="nav-icon">◈</span> 분석 결과</div>
+      <div class="nav-item" onclick="nav('detail')"><span class="nav-icon">≡</span> 상세 조회</div>
+      <div class="nav-section" style="margin-top:12px">관리</div>
+      <div class="nav-item" onclick="nav('history')"><span class="nav-icon">⊙</span> 패턴 학습 데이터</div>
+      <div class="nav-item" id="nav-admin" style="display:none" onclick="nav('admin')"><span class="nav-icon">⚙</span> 계정 관리</div>
+      <div class="nav-item" onclick="nav('mypage')"><span class="nav-icon">○</span> 내 계정</div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="doLogout()">로그아웃</button>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-title">거래 업로드</span>
+      <span class="topbar-meta" id="topbar-meta">—</span>
+    </div>
+    <div class="content">
+
+      <!-- ① 업로드 -->
+      <div id="page-upload" class="page active">
+        <div class="card">
+          <div class="card-title">파일 설정</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>법인명</label>
+              <input type="text" id="corp-input" placeholder="예: (주)ABC코리아" list="corp-suggestions"/>
+              <datalist id="corp-suggestions"></datalist>
+            </div>
+            <div class="form-group">
+              <label>파일 유형</label>
+              <select id="file-type-select">
+                <option value="new">신규 거래 (오늘 승인 건)</option>
+                <option value="history">과거 데이터 (패턴 학습)</option>
+              </select>
+            </div>
+          </div>
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+               ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event)">
+            <div class="upload-icon">📂</div>
+            <div class="upload-title">엑셀 파일을 끌어다 놓거나 클릭해서 선택</div>
+            <div class="upload-hint" style="margin-top:6px">지원 형식: .xlsx · .xls · .csv &nbsp;|&nbsp; 컬럼: 거래일자, 수취인명, 금액, 계좌번호, 적요</div>
+          </div>
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="fileSelected(this)">
+        </div>
+        <div class="card" id="preview-card" style="display:none">
+          <div class="preview-info">
+            <span class="preview-label" id="preview-label">—</span>
+            <div style="display:flex;gap:8px">
+              <button class="btn" onclick="resetFile()">다시 선택</button>
+              <button class="btn btn-dark" onclick="submitFile()">분석 시작 →</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr id="preview-thead"></tr></thead><tbody id="preview-tbody"></tbody></table>
+          </div>
+          <p id="preview-more" style="font-size:12px;color:var(--text3);margin-top:8px;"></p>
+        </div>
+      </div>
+
+      <!-- ② 분석 결과 -->
+      <div id="page-result" class="page">
+        <div id="result-empty" class="empty"><div class="empty-icon">◈</div><p>업로드 탭에서 파일을 분석하면 결과가 여기에 표시됩니다.</p></div>
+        <div id="result-content" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
+            <div>
+              <h2 style="font-size:17px;font-weight:500" id="result-title">—</h2>
+              <p style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px" id="result-subtitle">—</p>
+            </div>
+            <button class="btn" onclick="exportCSV()">CSV 내보내기</button>
+          </div>
+          <div class="metrics-grid" id="metrics-grid"></div>
+          <div class="card" id="warning-card" style="display:none">
+            <div class="card-title">이상 · 주의 거래 목록</div>
+            <div class="table-wrap"><table>
+              <thead><tr>
+                <th style="width:90px">거래일자</th><th style="width:130px">수취인</th>
+                <th style="width:115px;text-align:right">금액(원)</th><th style="width:120px">계좌번호</th>
+                <th style="width:70px;text-align:center">위험도</th><th>감지 사유</th>
+              </tr></thead>
+              <tbody id="alert-tbody"></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <div class="card-title">수취인별 요약</div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>수취인</th><th style="text-align:right">건수</th><th style="text-align:right">합계금액(원)</th><th style="text-align:center">위험도</th></tr></thead>
+              <tbody id="summary-tbody"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ 상세 조회 -->
+      <div id="page-detail" class="page">
+        <div id="detail-empty" class="empty"><div class="empty-icon">≡</div><p>분석 완료 후 상세 조회가 가능합니다.</p></div>
+        <div id="detail-content" style="display:none">
+          <div class="filter-bar">
+            <select id="risk-filter" onchange="renderDetail()">
+              <option value="all">전체 위험도</option><option value="이상">이상</option>
+              <option value="주의">주의</option><option value="정상">정상</option>
+            </select>
+            <input type="text" id="search-box" placeholder="수취인 / 계좌번호 검색" oninput="renderDetail()">
+            <div style="margin-left:auto"><button class="btn" onclick="exportCSV()">CSV 내보내기</button></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th style="width:90px">거래일자</th><th style="width:130px">수취인</th>
+              <th style="width:115px;text-align:right">금액(원)</th><th style="width:120px">계좌번호</th>
+              <th style="width:80px">적요</th><th style="width:70px;text-align:center">위험도</th><th>감지 사유</th>
+            </tr></thead>
+            <tbody id="detail-tbody"></tbody>
+          </table></div>
+          <p style="font-size:12px;color:var(--text3);margin-top:8px" id="detail-count"></p>
+        </div>
+      </div>
+
+      <!-- ④ 패턴 학습 데이터 -->
+      <div id="page-history" class="page">
+        <div class="card">
+          <div class="card-title">저장된 법인 패턴 데이터</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:16px">과거 데이터를 업로드하면 이상 감지 정확도가 높아집니다.</p>
+          <div id="history-list-wrap">
+            <div class="empty"><div class="empty-icon">⊙</div><p>저장된 학습 데이터가 없습니다.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ 계정 관리 (관리자 전용) -->
+      <div id="page-admin" class="page">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">팀원 계정 목록</div>
+            <button class="btn btn-dark btn-sm" onclick="openCreateModal()">+ 계정 추가</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>아이디</th><th>이름</th><th>권한</th><th>생성일</th><th style="width:140px">관리</th></tr></thead>
+            <tbody id="users-tbody"></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="card-title">접속 감사 로그 (최근 200건)</div>
+          <div class="audit-log" id="audit-log">불러오는 중...</div>
+        </div>
+      </div>
+
+      <!-- ⑥ 내 계정 -->
+      <div id="page-mypage" class="page">
+        <div class="card" style="max-width:480px">
+          <div class="card-title">내 계정 정보</div>
+          <div style="margin-bottom:20px">
+            <table style="width:100%">
+              <tr><td style="color:var(--text2);padding:8px 0;width:80px;font-size:13px">아이디</td><td style="font-family:var(--mono);font-size:13px" id="my-uid">—</td></tr>
+              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">이름</td><td style="font-size:13px" id="my-name">—</td></tr>
+              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">권한</td><td id="my-role">—</td></tr>
+            </table>
+          </div>
+          <div class="pw-section">
+            <h4>비밀번호 변경</h4>
+            <div class="form-group" style="margin-bottom:12px">
+              <label style="font-size:12px;color:var(--text2)">현재 비밀번호</label>
+              <input type="password" id="old-pw" style="width:100%;height:38px" placeholder="현재 비밀번호"/>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label style="font-size:12px;color:var(--text2)">새 비밀번호 (8자 이상)</label>
+              <input type="password" id="new-pw" style="width:100%;height:38px" placeholder="새 비밀번호"/>
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label style="font-size:12px;color:var(--text2)">새 비밀번호 확인</label>
+              <input type="password" id="new-pw2" style="width:100%;height:38px" placeholder="새 비밀번호 확인"/>
+            </div>
+            <div id="pw-error" style="font-size:12px;color:var(--danger);margin-bottom:10px;display:none"></div>
+            <button class="btn btn-dark" onclick="changeMyPw()">비밀번호 변경</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="progress-overlay" id="progress-overlay">
+  <div class="progress-box">
+    <h3 id="prog-title">분석 중...</h3>
+    <p id="prog-msg">잠시만 기다려 주세요.</p>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- Create User Modal -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h3>새 계정 추가</h3>
+    <div class="form-group"><label>이름</label><input type="text" id="new-name" placeholder="홍길동"/></div>
+    <div class="form-group"><label>아이디</label><input type="text" id="new-uid" placeholder="hong.gildong"/></div>
+    <div class="form-group"><label>비밀번호 (8자 이상)</label><input type="password" id="new-pw-admin" placeholder="초기 비밀번호"/></div>
+    <div class="form-group"><label>권한</label>
+      <select id="new-role"><option value="user">일반 사용자</option><option value="admin">관리자</option></select>
+    </div>
+    <div class="modal-error" id="create-error"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('create-modal')">취소</button>
+      <button class="btn btn-dark" onclick="createUser()">계정 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset PW Modal -->
+<div class="modal-overlay" id="reset-modal">
+  <div class="modal">
+    <h3>비밀번호 초기화</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px" id="reset-target-label">—</p>
+    <div class="form-group"><label>새 비밀번호 (8자 이상)</label><input type="password" id="reset-pw" placeholder="새 비밀번호"/></div>
+    <div class="modal-error" id="reset-error"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('reset-modal')">취소</button>
+      <button class="btn btn-dark" onclick="doResetPw()">변경</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const CURRENT_USER = { id:"{{ userid }}", name:"{{ username }}", role:"{{ role }}" };
+let currentFile=null, analyzedData=[], corpName='', resetTargetUid='';
+
+// Init
+document.getElementById('user-avatar').textContent = CURRENT_USER.name.slice(0,1);
+document.getElementById('user-role-display').textContent = CURRENT_USER.role==='admin'?'관리자':'일반 사용자';
+if(CURRENT_USER.role==='admin') document.getElementById('nav-admin').style.display='flex';
+document.getElementById('my-uid').textContent=CURRENT_USER.id;
+document.getElementById('my-name').textContent=CURRENT_USER.name;
+document.getElementById('my-role').innerHTML=CURRENT_USER.role==='admin'
+  ?'<span class="badge badge-admin">관리자</span>':'<span class="badge badge-ok">일반 사용자</span>';
+loadCorpSuggestions();
+
+function nav(page){
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  const pageIds=['upload','result','detail','history','admin','mypage'];
+  const navIdx=[0,1,2,3,4,5]; // indices in nav-item list
+  const allNavItems=document.querySelectorAll('.nav-item');
+  const idx=pageIds.indexOf(page);
+  // find nav item by onclick
+  allNavItems.forEach(el=>{if(el.getAttribute('onclick')&&el.getAttribute('onclick').includes(`'${page}'`))el.classList.add('active');});
+  document.getElementById('page-'+page).classList.add('active');
+  const titles={upload:'거래 업로드',result:'분석 결과',detail:'상세 조회',history:'패턴 학습 데이터',admin:'계정 관리',mypage:'내 계정'};
+  document.getElementById('topbar-title').textContent=titles[page]||'';
+  if(page==='admin'){loadUsersPage();loadAuditLog();}
+  if(page==='history') loadHistoryPage();
+}
+
+async function loadCorpSuggestions(){
+  try{const r=await fetch('/api/corporations');const d=await r.json();
+  const dl=document.getElementById('corp-suggestions');
+  dl.innerHTML=d.corporations.map(c=>`<option value="${c}">`).join('');}catch(e){}
+}
+
+function dragOver(e){e.preventDefault();document.getElementById('upload-zone').classList.add('dragover');}
+function dragLeave(){document.getElementById('upload-zone').classList.remove('dragover');}
+function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)showPreview(f);}
+function fileSelected(input){if(input.files[0])showPreview(input.files[0]);}
+
+function showPreview(file){
+  currentFile=file;
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(!['xlsx','xls','csv'].includes(ext)){toast('xlsx, xls, csv 파일만 지원합니다.');return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      let rows;
+      if(ext==='csv'){rows=parseCSV(e.target.result);}
+      else{const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
+      renderPreview(rows,file.name);
+    }catch(err){toast('파일 읽기 오류: '+err.message);}
+  };
+  if(ext==='csv')reader.readAsText(file,'utf-8');else reader.readAsBinaryString(file);
+}
+
+function parseCSV(text){
+  const lines=text.split('\n').filter(l=>l.trim());if(!lines.length)return[];
+  const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim());
+  return lines.slice(1).map(line=>{const vals=line.split(',').map(v=>v.replace(/"/g,'').trim());const obj={};headers.forEach((h,i)=>obj[h]=vals[i]||'');return obj;});
+}
+
+function renderPreview(rows,filename){
+  if(!rows.length){toast('데이터가 없습니다.');return;}
+  const keys=Object.keys(rows[0]).slice(0,6);
+  document.getElementById('preview-label').textContent=`${filename} · 총 ${rows.length}건`;
+  document.getElementById('preview-thead').innerHTML=keys.map(k=>`<th>${k}</th>`).join('');
+  document.getElementById('preview-tbody').innerHTML=rows.slice(0,5).map(r=>`<tr>${keys.map(k=>`<td>${String(r[k]||'').slice(0,20)}</td>`).join('')}</tr>`).join('');
+  const more=rows.length-5;
+  document.getElementById('preview-more').textContent=more>0?`... 외 ${more}건`:'';
+  document.getElementById('preview-card').style.display='block';
+}
+
+function resetFile(){currentFile=null;document.getElementById('file-input').value='';document.getElementById('preview-card').style.display='none';}
+
+async function submitFile(){
+  const corp=document.getElementById('corp-input').value.trim();
+  const fileType=document.getElementById('file-type-select').value;
+  if(!corp){toast('법인명을 입력해주세요.');return;}
+  if(!currentFile){toast('파일을 선택해주세요.');return;}
+  showProgress('파일 분석 중...','거래 데이터를 처리하고 있습니다.',30);
+  const fd=new FormData();fd.append('file',currentFile);fd.append('corp_name',corp);fd.append('file_type',fileType);
+  try{
+    setProgress(60);
+    const res=await fetch('/api/upload',{method:'POST',body:fd});
+    if(res.status===401){window.location.href='/login';return;}
+    const data=await res.json();
+    setProgress(90);
+    if(data.error){hideProgress();toast('오류: '+data.error);return;}
+    await delay(300);hideProgress();
+    if(data.type==='history'){toast(data.message);loadCorpSuggestions();resetFile();}
+    else{corpName=data.corp_name;analyzedData=data.results;renderResult(data);renderDetail();nav('result');toast(`분석 완료 · 이상 ${data.danger}건 / 주의 ${data.warning}건`);}
+  }catch(e){hideProgress();toast('서버 오류가 발생했습니다.');}
+}
+
+function renderResult(data){
+  document.getElementById('result-empty').style.display='none';
+  document.getElementById('result-content').style.display='block';
+  document.getElementById('detail-empty').style.display='none';
+  document.getElementById('detail-content').style.display='block';
+  document.getElementById('result-title').textContent=data.corp_name;
+  const histNote=data.has_history?'패턴 학습 데이터 적용':'패턴 데이터 없음 (금액 규칙만 적용)';
+  document.getElementById('result-subtitle').textContent=`${new Date().toLocaleDateString('ko-KR')} · 총 ${data.total}건 · ${histNote} · 분석: ${data.analyzed_by}`;
+  document.getElementById('topbar-meta').textContent=data.corp_name;
+  const amtB=(data.total_amount/1e8).toFixed(1);
+  document.getElementById('metrics-grid').innerHTML=`
+    <div class="metric-card danger"><div class="m-label">이상 거래</div><div class="m-value">${data.danger}</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>
+    <div class="metric-card warning"><div class="m-label">주의 거래</div><div class="m-value">${data.warning}</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>
+    <div class="metric-card ok"><div class="m-label">정상 거래</div><div class="m-value">${data.ok}</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>
+    <div class="metric-card"><div class="m-label">총 금액</div><div class="m-value" style="font-size:22px">${amtB}</div><div style="font-size:10px;color:var(--text3);margin-top:3px">억원</div></div>`;
+  const alerts=data.results.filter(r=>r.risk!=='정상');
+  const wc=document.getElementById('warning-card');
+  if(alerts.length){wc.style.display='block';document.getElementById('alert-tbody').innerHTML=alerts.map(r=>rowHtml(r,false)).join('');}
+  else wc.style.display='none';
+  const pm={};data.results.forEach(r=>{const p=r.payee||'(미기재)';if(!pm[p])pm[p]={count:0,total:0,risk:'정상'};pm[p].count++;pm[p].total+=r.amount_clean||0;if(r.risk==='이상')pm[p].risk='이상';else if(r.risk==='주의'&&pm[p].risk!=='이상')pm[p].risk='주의';});
+  document.getElementById('summary-tbody').innerHTML=Object.entries(pm).sort((a,b)=>b[1].total-a[1].total).map(([name,s])=>`<tr><td>${name}</td><td style="text-align:right;font-family:var(--mono)">${s.count}</td><td style="text-align:right;font-family:var(--mono)">${Math.round(s.total).toLocaleString()}</td><td style="text-align:center">${badgeHtml(s.risk)}</td></tr>`).join('');
+}
+
+function rowHtml(r,showMemo=true){
+  const reasons=(r.reasons||[]).map(s=>`<span class="reason-tag">${s}</span>`).join('');
+  const amt=r.amount_clean?Math.round(r.amount_clean).toLocaleString():(r.amount||'');
+  let h=`<tr><td style="font-family:var(--mono);font-size:12px">${r.date||''}</td><td>${r.payee||''}</td><td style="text-align:right;font-family:var(--mono)">${amt}</td><td style="font-family:var(--mono);font-size:12px">${(r.account||'').slice(0,14)}</td>`;
+  if(showMemo)h+=`<td style="font-size:12px;color:var(--text2)">${(r.memo||'').slice(0,15)}</td>`;
+  h+=`<td style="text-align:center">${badgeHtml(r.risk)}</td><td>${reasons}</td></tr>`;
+  return h;
+}
+
+function badgeHtml(risk){const c={'이상':'badge-danger','주의':'badge-warning','정상':'badge-ok'};return`<span class="badge ${c[risk]||'badge-ok'}">${risk}</span>`;}
+
+function renderDetail(){
+  if(!analyzedData.length)return;
+  const risk=document.getElementById('risk-filter')?.value||'all';
+  const search=(document.getElementById('search-box')?.value||'').toLowerCase();
+  let f=analyzedData.filter(r=>{const mr=risk==='all'||r.risk===risk;const ms=!search||(r.payee||'').toLowerCase().includes(search)||(r.account||'').toLowerCase().includes(search);return mr&&ms;});
+  document.getElementById('detail-tbody').innerHTML=f.length?f.map(r=>rowHtml(r,true)).join(''):`<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">해당 조건의 거래가 없습니다.</td></tr>`;
+  document.getElementById('detail-count').textContent=`${f.length}건 표시`;
+}
+
+async function exportCSV(){
+  if(!analyzedData.length){toast('분석 데이터가 없습니다.');return;}
+  const res=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:analyzedData})});
+  if(res.status===401){window.location.href='/login';return;}
+  const blob=await res.blob();const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`이상거래분석_${corpName}_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
+  toast('CSV 파일 다운로드 완료');
+}
+
+async function loadHistoryPage(){
+  const res=await fetch('/api/corporations');const data=await res.json();
+  const wrap=document.getElementById('history-list-wrap');
+  if(!data.corporations.length){wrap.innerHTML=`<div class="empty"><div class="empty-icon">⊙</div><p>저장된 학습 데이터가 없습니다.</p></div>`;return;}
+  wrap.innerHTML=`<ul class="corp-list">${data.corporations.map(c=>`<li><div><div style="font-weight:500;font-size:14px">${c}</div><div style="font-size:12px;color:var(--text3);font-family:var(--mono)">학습 데이터 저장됨</div></div><button class="btn btn-danger-outline btn-sm" onclick="deleteHistory('${c}')">삭제</button></li>`).join('')}</ul>`;
+}
+
+async function deleteHistory(corp){
+  if(!confirm(`'${corp}' 학습 데이터를 삭제할까요?`))return;
+  await fetch(`/api/history/${encodeURIComponent(corp)}`,{method:'DELETE'});
+  toast(`'${corp}' 삭제 완료`);loadHistoryPage();loadCorpSuggestions();
+}
+
+// Admin
+async function loadUsersPage(){
+  const res=await fetch('/api/admin/users');
+  if(res.status===403)return;
+  const users=await res.json();
+  document.getElementById('users-tbody').innerHTML=users.map(u=>`
+    <tr>
+      <td style="font-family:var(--mono);font-size:12px">${u.id}</td>
+      <td>${u.name}</td>
+      <td>${u.role==='admin'?'<span class="badge badge-admin">관리자</span>':'<span class="badge badge-ok">일반</span>'}</td>
+      <td style="font-size:11px;color:var(--text3);font-family:var(--mono)">${u.created_at?u.created_at.slice(0,10):'-'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="openResetModal('${u.id}','${u.name}')">PW 초기화</button>
+          ${u.id!==CURRENT_USER.id?`<button class="btn btn-danger-outline btn-sm" onclick="deleteUser('${u.id}','${u.name}')">삭제</button>`:''}
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+async function loadAuditLog(){
+  const res=await fetch('/api/admin/audit');const data=await res.json();
+  const el=document.getElementById('audit-log');
+  if(!data.logs.length){el.textContent='로그 없음';return;}
+  el.innerHTML=data.logs.map(l=>{
+    let cls='';
+    if(l.includes('LOGIN_FAIL')||l.includes('이상'))cls='log-danger';
+    else if(l.includes('LOGIN_OK')||l.includes('OK'))cls='log-ok';
+    return`<div class="${cls}">${l}</div>`;
+  }).join('');
+}
+
+function openCreateModal(){
+  ['new-name','new-uid','new-pw-admin'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('create-error').style.display='none';
+  document.getElementById('create-modal').classList.add('active');
+}
+
+async function createUser(){
+  const name=document.getElementById('new-name').value.trim();
+  const uid=document.getElementById('new-uid').value.trim();
+  const pw=document.getElementById('new-pw-admin').value.trim();
+  const role=document.getElementById('new-role').value;
+  const errEl=document.getElementById('create-error');
+  const res=await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,username:uid,password:pw,role})});
+  const data=await res.json();
+  if(!data.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  closeModal('create-modal');toast(data.message);loadUsersPage();
+}
+
+function openResetModal(uid,name){
+  resetTargetUid=uid;
+  document.getElementById('reset-target-label').textContent=`${name} (${uid})의 비밀번호를 초기화합니다.`;
+  document.getElementById('reset-pw').value='';
+  document.getElementById('reset-error').style.display='none';
+  document.getElementById('reset-modal').classList.add('active');
+}
+
+async function doResetPw(){
+  const pw=document.getElementById('reset-pw').value.trim();
+  const errEl=document.getElementById('reset-error');
+  const res=await fetch(`/api/admin/users/${resetTargetUid}/password`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+  const data=await res.json();
+  if(!data.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  closeModal('reset-modal');toast(data.message);loadAuditLog();
+}
+
+async function deleteUser(uid,name){
+  if(!confirm(`'${name}' 계정을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`))return;
+  const res=await fetch(`/api/admin/users/${uid}`,{method:'DELETE'});const data=await res.json();
+  if(data.ok){toast(data.message);loadUsersPage();}else toast('오류: '+data.error);
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('active');}
+
+// My page pw change
+async function changeMyPw(){
+  const old=document.getElementById('old-pw').value;
+  const nw=document.getElementById('new-pw').value;
+  const nw2=document.getElementById('new-pw2').value;
+  const errEl=document.getElementById('pw-error');
+  errEl.style.display='none';
+  if(nw!==nw2){errEl.textContent='새 비밀번호가 일치하지 않습니다.';errEl.style.display='block';return;}
+  const res=await fetch('/api/me/password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({old_password:old,new_password:nw})});
+  const data=await res.json();
+  if(!data.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  toast(data.message);['old-pw','new-pw','new-pw2'].forEach(id=>document.getElementById(id).value='');
+}
+
+function doLogout(){window.location.href='/logout';}
+
+// Progress
+function showProgress(t,m,p){document.getElementById('prog-title').textContent=t;document.getElementById('prog-msg').textContent=m;document.getElementById('prog-fill').style.width=p+'%';document.getElementById('progress-overlay').classList.add('active');}
+function setProgress(p){document.getElementById('prog-fill').style.width=p+'%';}
+function hideProgress(){document.getElementById('progress-overlay').classList.remove('active');}
+
+// Toast
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3200);}
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('active');}));
+</script>
+</body>
+</html>
