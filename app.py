@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect
 import pandas as pd
 import numpy as np
 import json, os, io, re, hashlib, secrets
@@ -14,8 +14,10 @@ DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 USERS_FILE   = os.path.join(DATA_DIR, "users.json")
+CORPS_FILE   = os.path.join(DATA_DIR, "corps.json")
 AUDIT_FILE   = os.path.join(DATA_DIR, "audit.log")
 
+# ── 유틸 ──────────────────────────────────────────────
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
@@ -32,6 +34,16 @@ def save_users(u):
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(u, f, ensure_ascii=False, indent=2)
 
+def load_corps():
+    if os.path.exists(CORPS_FILE):
+        with open(CORPS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    return []  # [{"id": "corp_001", "name": "(주)ABC코리아", "manager": "hong"}]
+
+def save_corps(corps):
+    with open(CORPS_FILE, "w", encoding="utf-8") as f:
+        json.dump(corps, f, ensure_ascii=False, indent=2)
+
 def audit(action, detail=""):
     line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {session.get('user','?')} | {action} | {detail}\n"
     with open(AUDIT_FILE, "a", encoding="utf-8") as f:
@@ -47,6 +59,7 @@ def save_history(h):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(h, f, ensure_ascii=False, indent=2)
 
+# ── 인증 데코레이터 ───────────────────────────────────
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -65,6 +78,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+# ── 페이지 라우트 ─────────────────────────────────────
 @app.route("/")
 def index():
     if "user" not in session:
@@ -96,40 +110,115 @@ def logout():
     session.clear()
     return redirect("/login")
 
-@app.route("/api/corporations")
+# ── 법인 관리 API ─────────────────────────────────────
+@app.route("/api/corps", methods=["GET"])
 @login_required
-def get_corporations():
-    return jsonify({"corporations": list(load_history().keys())})
+def get_corps():
+    corps = load_corps()
+    uid = session["user"]
+    role = session["role"]
+    # 관리자는 전체, 일반 사용자는 담당 법인만
+    if role == "admin":
+        return jsonify(corps)
+    else:
+        return jsonify([c for c in corps if c.get("manager") == uid])
 
+@app.route("/api/corps", methods=["POST"])
+@login_required
+@admin_required
+def create_corp():
+    d = request.get_json() or {}
+    name = d.get("name","").strip()
+    manager = d.get("manager","").strip()
+    if not name:
+        return jsonify({"error": "법인명을 입력해주세요."}), 400
+    corps = load_corps()
+    if any(c["name"] == name for c in corps):
+        return jsonify({"error": "이미 등록된 법인명입니다."}), 409
+    corp_id = f"corp_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    corps.append({"id": corp_id, "name": name, "manager": manager,
+                  "created_at": datetime.now().isoformat()})
+    save_corps(corps)
+    audit("CORP_CREATE", f"{name} → {manager}")
+    return jsonify({"ok": True, "message": f"'{name}' 법인이 등록되었습니다."})
+
+@app.route("/api/corps/<corp_id>", methods=["PUT"])
+@login_required
+@admin_required
+def update_corp(corp_id):
+    d = request.get_json() or {}
+    corps = load_corps()
+    for c in corps:
+        if c["id"] == corp_id:
+            c["name"] = d.get("name", c["name"]).strip()
+            c["manager"] = d.get("manager", c["manager"]).strip()
+            save_corps(corps)
+            audit("CORP_UPDATE", c["name"])
+            return jsonify({"ok": True})
+    return jsonify({"error": "법인을 찾을 수 없습니다."}), 404
+
+@app.route("/api/corps/<corp_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def delete_corp(corp_id):
+    corps = load_corps()
+    target = next((c for c in corps if c["id"] == corp_id), None)
+    if not target:
+        return jsonify({"error": "법인을 찾을 수 없습니다."}), 404
+    corps = [c for c in corps if c["id"] != corp_id]
+    save_corps(corps)
+    # 관련 학습 데이터도 삭제
+    h = load_history()
+    for key in [target["name"], target["name"]+"__cumul__"]:
+        if key in h: del h[key]
+    save_history(h)
+    audit("CORP_DELETE", target["name"])
+    return jsonify({"ok": True, "message": f"'{target['name']}' 법인이 삭제되었습니다."})
+
+# ── 분석 API ──────────────────────────────────────────
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload():
     if "file" not in request.files:
         return jsonify({"error": "파일이 없습니다."}), 400
     file      = request.files["file"]
-    corp_name = request.form.get("corp_name","").strip()
+    corp_id   = request.form.get("corp_id","").strip()
     file_type = request.form.get("file_type","new")
-    if not corp_name:
-        return jsonify({"error": "법인명을 입력해주세요."}), 400
+
+    # 법인 검증
+    corps = load_corps()
+    corp  = next((c for c in corps if c["id"] == corp_id), None)
+    if not corp:
+        return jsonify({"error": "법인을 선택해주세요."}), 400
+
+    # 담당자 확인 (관리자는 전체 가능)
+    if session["role"] != "admin" and corp.get("manager") != session["user"]:
+        return jsonify({"error": "담당 법인이 아닙니다."}), 403
+
+    corp_name = corp["name"]
+
     try:
         fname = file.filename.lower()
         df = pd.read_csv(file, encoding="utf-8-sig") if fname.endswith(".csv") else pd.read_excel(file)
     except Exception as e:
         return jsonify({"error": f"파일 읽기 오류: {e}"}), 400
+
     df   = normalize_columns(df).fillna("")
     rows = [{k: str(v) if not isinstance(v,(int,float)) else v for k,v in r.items()}
             for r in df.to_dict("records")]
+
     if file_type == "history":
         h = load_history(); h[corp_name] = rows; save_history(h)
         audit("HISTORY_SAVE", f"{corp_name} {len(rows)}건")
         return jsonify({"message": f"'{corp_name}' 과거 데이터 {len(rows)}건 저장 완료",
                         "count": len(rows), "type": "history"})
+
     h       = load_history()
     results = analyze_transactions(rows, corp_name, h)
     danger  = sum(1 for r in results if r["risk"]=="이상")
     audit("ANALYZE", f"{corp_name} {len(results)}건 → 이상{danger}")
 
-    # 누적 학습: 분석한 거래처를 자동으로 누적 저장 (②)
+    # 누적 학습
     cumul_key = corp_name + "__cumul__"
     existing_cumul = h.get(cumul_key, [])
     existing_payees = {r.get("payee","") for r in existing_cumul}
@@ -172,10 +261,13 @@ def export_csv():
 @login_required
 def delete_history(corp_name):
     h = load_history()
-    if corp_name in h: del h[corp_name]; save_history(h)
+    for key in [corp_name, corp_name+"__cumul__"]:
+        if key in h: del h[key]
+    save_history(h)
     audit("HISTORY_DELETE", corp_name)
     return jsonify({"message": f"'{corp_name}' 학습 데이터 삭제 완료"})
 
+# ── 관리자 전용 API ────────────────────────────────────
 @app.route("/api/admin/users", methods=["GET"])
 @login_required
 @admin_required
@@ -248,6 +340,7 @@ def change_own_password():
     audit("PW_CHANGE_SELF")
     return jsonify({"ok": True, "message": "비밀번호가 변경되었습니다."})
 
+# ── 분석 로직 ──────────────────────────────────────────
 def normalize_columns(df):
     col_map = {}
     for col in df.columns:
@@ -266,19 +359,16 @@ def clean_amount(val):
 
 def analyze_transactions(rows, corp_name, history):
     corp_history = history.get(corp_name, [])
+    cumul_key    = corp_name + "__cumul__"
+    cumul_data   = history.get(cumul_key, [])
+    all_history  = corp_history + cumul_data
 
-    # 과거 데이터(학습) + 누적 분석 데이터 합산
-    cumul_key = corp_name + "__cumul__"
-    cumul_data = history.get(cumul_key, [])
-    all_history = corp_history + cumul_data
-
-    hist_amounts = [a for a in (clean_amount(r.get("amount", 0)) for r in all_history) if a > 0]
-    hist_payees  = {r.get("payee", "") for r in all_history if r.get("payee")}
-
+    hist_amounts = [a for a in (clean_amount(r.get("amount",0)) for r in all_history) if a>0]
+    hist_payees  = {r.get("payee","") for r in all_history if r.get("payee")}
     has_any_history = len(all_history) > 0
 
     avg_amt = np.mean(hist_amounts) if hist_amounts else 0
-    p95_amt = np.percentile(hist_amounts, 95) if hist_amounts else 0
+    p95_amt = np.percentile(hist_amounts,95) if hist_amounts else 0
 
     payee_count, amount_count = defaultdict(int), defaultdict(int)
     for r in rows:
@@ -288,43 +378,30 @@ def analyze_transactions(rows, corp_name, history):
     results = []
     for r in rows:
         reasons, score = [], 0
-        amt = clean_amount(r.get("amount", 0))
+        amt = clean_amount(r.get("amount",0))
 
-        # 금액 규칙
-        if amt >= 500_000_000: reasons.append("5억원 이상 초고액"); score += 3
-        elif amt >= 100_000_000: reasons.append("1억원 이상 고액"); score += 2
-        elif amt >= 50_000_000: reasons.append("5천만원 이상"); score += 1
+        if amt>=500_000_000: reasons.append("5억원 이상 초고액"); score+=3
+        elif amt>=100_000_000: reasons.append("1억원 이상 고액"); score+=2
+        elif amt>=50_000_000: reasons.append("5천만원 이상"); score+=1
 
-        if avg_amt > 0 and amt > avg_amt * 5:
-            reasons.append(f"평균 대비 {int(amt/avg_amt)}배 초과"); score += 2
-        if p95_amt > 0 and amt > p95_amt * 2:
-            reasons.append("상위 5% 금액의 2배 초과"); score += 2
+        if avg_amt>0 and amt>avg_amt*5: reasons.append(f"평균 대비 {int(amt/avg_amt)}배 초과"); score+=2
+        if p95_amt>0 and amt>p95_amt*2: reasons.append("상위 5% 금액의 2배 초과"); score+=2
 
-        # 신규 수취인 감지 (금액 무관, 과거 이력 있을 때)
-        payee = r.get("payee", "")
+        payee = r.get("payee","")
         if payee and has_any_history and payee not in hist_payees:
-            reasons.append("신규 거래처")  # ① 금액 무관하게 항상 표시
-            score += 1
-            if amt >= 10_000_000:
-                reasons.append("신규 거래처 고액"); score += 1
-
-        # 과거 데이터 없을 때도 당일 처음 등장한 수취인 표시
+            reasons.append("신규 거래처"); score+=1
+            if amt>=10_000_000: reasons.append("신규 거래처 고액"); score+=1
         if payee and not has_any_history:
-            reasons.append("거래처 이력 없음 (패턴 학습 필요)")  # 학습 데이터 없음 안내
+            reasons.append("거래처 이력 없음 (패턴 학습 필요)")
 
-        if payee_count.get(payee, 0) >= 3:
-            reasons.append(f"동일 수취인 {payee_count[payee]}건 반복"); score += 1
-        if re.search(r"긴급|급건|urgent|즉시|당일처리", str(r.get("memo", "")), re.I):
-            reasons.append("긴급 처리 요청"); score += 1
-        if amount_count.get(str(r.get("amount", "")), 0) >= 3 and amt > 0:
-            reasons.append("동일 금액 3건 이상 반복"); score += 1
-        acct = str(r.get("account", "")).strip()
-        if (not acct or acct in ["nan", "-", ""]) and amt >= 1_000_000:
-            reasons.append("계좌번호 미기재"); score += 1
+        if payee_count.get(payee,0)>=3: reasons.append(f"동일 수취인 {payee_count[payee]}건 반복"); score+=1
+        if re.search(r"긴급|급건|urgent|즉시|당일처리",str(r.get("memo","")),re.I): reasons.append("긴급 처리 요청"); score+=1
+        if amount_count.get(str(r.get("amount","")),0)>=3 and amt>0: reasons.append("동일 금액 3건 이상 반복"); score+=1
+        acct = str(r.get("account","")).strip()
+        if (not acct or acct in ["nan","-",""]) and amt>=1_000_000: reasons.append("계좌번호 미기재"); score+=1
 
-        risk = "이상" if score >= 4 else "주의" if score >= 2 else "정상"
-        results.append({**r, "corp": corp_name, "risk": risk,
-                        "risk_score": score, "reasons": reasons, "amount_clean": amt})
+        risk = "이상" if score>=4 else "주의" if score>=2 else "정상"
+        results.append({**r,"corp":corp_name,"risk":risk,"risk_score":score,"reasons":reasons,"amount_clean":amt})
     return results
 
 if __name__ == "__main__":
