@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>자금 이상거래 감지 시스템</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#dddbd3;--border2:#c8c6bc;--text:#1a1917;--text2:#6b6860;--text3:#9b9890;--danger-bg:#fff0ee;--danger:#c0392b;--danger-border:#f5c6c0;--warning-bg:#fff8ec;--warning:#9a6200;--warning-border:#f5e0a0;--ok-bg:#eef7f0;--ok:#1e6e3a;--ok-border:#b8e0c4;--mono:'JetBrains Mono',monospace}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -33,8 +33,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .topbar-title{font-size:14px;font-weight:500}
 .topbar-meta{font-size:12px;color:var(--text3);font-family:var(--mono)}
 .content{padding:28px 32px;flex:1}
-.page{display:none}
-.page.active{display:block}
+.page{display:none}.page.active{display:block}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:22px;margin-bottom:18px}
 .card-title{font-size:11px;font-weight:500;color:var(--text2);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
 .upload-zone{border:1.5px dashed var(--border2);border-radius:8px;padding:44px 24px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--surface2)}
@@ -47,7 +46,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .form-group label{font-size:11px;color:var(--text2);font-weight:500;letter-spacing:0.03em;text-transform:uppercase}
 .form-group input,.form-group select{height:38px;padding:0 12px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);font-size:13px;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color 0.15s}
 .form-group input:focus,.form-group select:focus{border-color:var(--text)}
-.form-group input{width:210px}
 .btn{height:38px;padding:0 16px;border-radius:6px;border:1px solid var(--border2);background:var(--surface);font-size:13px;cursor:pointer;color:var(--text);font-family:'Noto Sans KR',sans-serif;transition:all 0.15s;white-space:nowrap}
 .btn:hover{background:var(--surface2)}
 .btn-dark{background:var(--text);color:#fff;border-color:var(--text)}
@@ -68,11 +66,12 @@ th{background:var(--surface2);padding:9px 14px;text-align:left;font-weight:500;f
 td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#fafaf6}
-.badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:500;font-family:var(--mono);letter-spacing:0.03em}
+.badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:500;font-family:var(--mono)}
 .badge-danger{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-border)}
 .badge-warning{background:var(--warning-bg);color:var(--warning);border:1px solid var(--warning-border)}
 .badge-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)}
 .badge-admin{background:#e8e4f8;color:#4a3b9e;border:1px solid #c8bff0}
+.badge-info{background:#e6f1fb;color:#185fa5;border:1px solid #b5d4f4}
 .reason-tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px;color:var(--text2);margin:1px 2px 1px 0}
 .filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .filter-bar input[type=text]{height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);font-size:13px;color:var(--text);font-family:'Noto Sans KR',sans-serif;outline:none;width:200px}
@@ -87,31 +86,29 @@ tr:hover td{background:#fafaf6}
 .progress-box p{font-size:13px;color:var(--text2);margin-bottom:18px}
 .progress-bar{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
 .progress-fill{height:100%;background:var(--text);border-radius:2px;transition:width 0.4s ease}
-.corp-list{list-style:none}
-.corp-list li{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:12px}
-.corp-list li:last-child{border-bottom:none}
 .empty{text-align:center;padding:48px 20px;color:var(--text3)}
 .empty-icon{font-size:36px;margin-bottom:10px}
 .empty p{font-size:14px}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;z-index:999;transform:translateY(80px);opacity:0;transition:all 0.25s ease;max-width:340px}
 .toast.show{transform:translateY(0);opacity:1}
-/* modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(26,25,23,0.45);z-index:300;align-items:center;justify-content:center}
 .modal-overlay.active{display:flex}
-.modal{background:var(--surface);border-radius:10px;padding:28px;min-width:360px;max-width:440px;width:90%}
+.modal{background:var(--surface);border-radius:10px;padding:28px;min-width:360px;max-width:460px;width:90%}
 .modal h3{font-size:15px;font-weight:500;margin-bottom:18px}
 .modal .form-group{margin-bottom:14px}
 .modal .form-group label{text-transform:none;letter-spacing:0;font-size:12px;margin-bottom:4px}
 .modal .form-group input,.modal .form-group select{width:100%;height:40px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
 .modal-error{font-size:12px;color:var(--danger);margin-top:6px;display:none}
-/* audit */
 .audit-log{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11px;color:var(--text2);max-height:360px;overflow-y:auto;line-height:1.8}
 .audit-log .log-danger{color:var(--danger)}
 .audit-log .log-ok{color:var(--ok)}
-/* pw change */
 .pw-section{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
 .pw-section h4{font-size:13px;font-weight:500;margin-bottom:14px}
+/* corp select styles */
+.corp-select-wrap{position:relative}
+.corp-select-wrap select{width:260px}
+.no-corp-msg{font-size:12px;color:var(--warning);margin-top:6px;display:none}
 </style>
 </head>
 <body>
@@ -124,7 +121,7 @@ tr:hover td{background:#fafaf6}
     <div class="sidebar-user">
       <div class="user-avatar" id="user-avatar">?</div>
       <div class="user-info">
-        <div class="user-name" id="user-name-display">{{ username }}</div>
+        <div class="user-name">{{ username }}</div>
         <div class="user-role" id="user-role-display">{{ role }}</div>
       </div>
     </div>
@@ -134,7 +131,7 @@ tr:hover td{background:#fafaf6}
       <div class="nav-item" onclick="nav('result')"><span class="nav-icon">◈</span> 분석 결과</div>
       <div class="nav-item" onclick="nav('detail')"><span class="nav-icon">≡</span> 상세 조회</div>
       <div class="nav-section" style="margin-top:12px">관리</div>
-      <div class="nav-item" onclick="nav('history')"><span class="nav-icon">⊙</span> 패턴 학습 데이터</div>
+      <div class="nav-item" id="nav-corps" onclick="nav('corps')"><span class="nav-icon">⊞</span> 법인 관리</div>
       <div class="nav-item" id="nav-admin" style="display:none" onclick="nav('admin')"><span class="nav-icon">⚙</span> 계정 관리</div>
       <div class="nav-item" onclick="nav('mypage')"><span class="nav-icon">○</span> 내 계정</div>
     </div>
@@ -156,9 +153,13 @@ tr:hover td{background:#fafaf6}
           <div class="card-title">파일 설정</div>
           <div class="form-row">
             <div class="form-group">
-              <label>법인명</label>
-              <input type="text" id="corp-input" placeholder="예: (주)ABC코리아" list="corp-suggestions"/>
-              <datalist id="corp-suggestions"></datalist>
+              <label>법인 선택</label>
+              <div class="corp-select-wrap">
+                <select id="corp-select" style="width:260px">
+                  <option value="">-- 법인을 선택하세요 --</option>
+                </select>
+                <div class="no-corp-msg" id="no-corp-msg">담당 법인이 없습니다. 관리자에게 문의하세요.</div>
+              </div>
             </div>
             <div class="form-group">
               <label>파일 유형</label>
@@ -248,18 +249,24 @@ tr:hover td{background:#fafaf6}
         </div>
       </div>
 
-      <!-- ④ 패턴 학습 데이터 -->
-      <div id="page-history" class="page">
+      <!-- ④ 법인 관리 -->
+      <div id="page-corps" class="page">
         <div class="card">
-          <div class="card-title">저장된 법인 패턴 데이터</div>
-          <p style="font-size:13px;color:var(--text2);margin-bottom:16px">과거 데이터를 업로드하면 이상 감지 정확도가 높아집니다.</p>
-          <div id="history-list-wrap">
-            <div class="empty"><div class="empty-icon">⊙</div><p>저장된 학습 데이터가 없습니다.</p></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="card-title" style="margin-bottom:0">법인 목록</div>
+            <button class="btn btn-dark btn-sm" id="btn-add-corp" onclick="openCorpModal()" style="display:none">+ 법인 추가</button>
           </div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:16px" id="corps-desc">담당 법인 목록입니다.</p>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th>법인명</th><th>담당자</th><th>학습 데이터</th><th>누적 거래처</th><th id="corps-action-th" style="width:140px;display:none">관리</th>
+            </tr></thead>
+            <tbody id="corps-tbody"></tbody>
+          </table></div>
         </div>
       </div>
 
-      <!-- ⑤ 계정 관리 (관리자 전용) -->
+      <!-- ⑤ 계정 관리 (관리자) -->
       <div id="page-admin" class="page">
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -283,25 +290,16 @@ tr:hover td{background:#fafaf6}
           <div class="card-title">내 계정 정보</div>
           <div style="margin-bottom:20px">
             <table style="width:100%">
-              <tr><td style="color:var(--text2);padding:8px 0;width:80px;font-size:13px">아이디</td><td style="font-family:var(--mono);font-size:13px" id="my-uid">—</td></tr>
-              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">이름</td><td style="font-size:13px" id="my-name">—</td></tr>
-              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">권한</td><td id="my-role">—</td></tr>
+              <tr><td style="color:var(--text2);padding:8px 0;width:80px;font-size:13px">아이디</td><td style="font-family:var(--mono);font-size:13px">{{ userid }}</td></tr>
+              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">이름</td><td style="font-size:13px">{{ username }}</td></tr>
+              <tr><td style="color:var(--text2);padding:8px 0;font-size:13px">권한</td><td>{% if role == 'admin' %}<span class="badge badge-admin">관리자</span>{% else %}<span class="badge badge-ok">일반 사용자</span>{% endif %}</td></tr>
             </table>
           </div>
           <div class="pw-section">
             <h4>비밀번호 변경</h4>
-            <div class="form-group" style="margin-bottom:12px">
-              <label style="font-size:12px;color:var(--text2)">현재 비밀번호</label>
-              <input type="password" id="old-pw" style="width:100%;height:38px" placeholder="현재 비밀번호"/>
-            </div>
-            <div class="form-group" style="margin-bottom:12px">
-              <label style="font-size:12px;color:var(--text2)">새 비밀번호 (8자 이상)</label>
-              <input type="password" id="new-pw" style="width:100%;height:38px" placeholder="새 비밀번호"/>
-            </div>
-            <div class="form-group" style="margin-bottom:16px">
-              <label style="font-size:12px;color:var(--text2)">새 비밀번호 확인</label>
-              <input type="password" id="new-pw2" style="width:100%;height:38px" placeholder="새 비밀번호 확인"/>
-            </div>
+            <div class="form-group" style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2)">현재 비밀번호</label><input type="password" id="old-pw" style="width:100%;height:38px" placeholder="현재 비밀번호"/></div>
+            <div class="form-group" style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2)">새 비밀번호 (8자 이상)</label><input type="password" id="new-pw" style="width:100%;height:38px" placeholder="새 비밀번호"/></div>
+            <div class="form-group" style="margin-bottom:16px"><label style="font-size:12px;color:var(--text2)">새 비밀번호 확인</label><input type="password" id="new-pw2" style="width:100%;height:38px" placeholder="새 비밀번호 확인"/></div>
             <div id="pw-error" style="font-size:12px;color:var(--danger);margin-bottom:10px;display:none"></div>
             <button class="btn btn-dark" onclick="changeMyPw()">비밀번호 변경</button>
           </div>
@@ -321,16 +319,31 @@ tr:hover td{background:#fafaf6}
   </div>
 </div>
 
-<!-- Create User Modal -->
+<!-- 법인 추가/수정 Modal -->
+<div class="modal-overlay" id="corp-modal">
+  <div class="modal">
+    <h3 id="corp-modal-title">법인 추가</h3>
+    <div class="form-group"><label>법인명</label><input type="text" id="corp-name-input" placeholder="(주)ABC코리아"/></div>
+    <div class="form-group">
+      <label>담당자</label>
+      <select id="corp-manager-select" style="width:100%;height:40px"></select>
+    </div>
+    <div class="modal-error" id="corp-error"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('corp-modal')">취소</button>
+      <button class="btn btn-dark" id="corp-modal-btn" onclick="saveCorpModal()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 계정 추가 Modal -->
 <div class="modal-overlay" id="create-modal">
   <div class="modal">
     <h3>새 계정 추가</h3>
     <div class="form-group"><label>이름</label><input type="text" id="new-name" placeholder="홍길동"/></div>
     <div class="form-group"><label>아이디</label><input type="text" id="new-uid" placeholder="hong.gildong"/></div>
     <div class="form-group"><label>비밀번호 (8자 이상)</label><input type="password" id="new-pw-admin" placeholder="초기 비밀번호"/></div>
-    <div class="form-group"><label>권한</label>
-      <select id="new-role"><option value="user">일반 사용자</option><option value="admin">관리자</option></select>
-    </div>
+    <div class="form-group"><label>권한</label><select id="new-role" style="width:100%;height:40px"><option value="user">일반 사용자</option><option value="admin">관리자</option></select></div>
     <div class="modal-error" id="create-error"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('create-modal')">취소</button>
@@ -339,7 +352,7 @@ tr:hover td{background:#fafaf6}
   </div>
 </div>
 
-<!-- Reset PW Modal -->
+<!-- PW 초기화 Modal -->
 <div class="modal-overlay" id="reset-modal">
   <div class="modal">
     <h3>비밀번호 초기화</h3>
@@ -358,40 +371,52 @@ tr:hover td{background:#fafaf6}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const CURRENT_USER = { id:"{{ userid }}", name:"{{ username }}", role:"{{ role }}" };
-let currentFile=null, analyzedData=[], corpName='', resetTargetUid='';
+let currentFile=null, analyzedData=[], corpName='', corpId='', resetTargetUid='', editCorpId='';
+let allCorps=[], allUsers=[];
 
 // Init
 document.getElementById('user-avatar').textContent = CURRENT_USER.name.slice(0,1);
 document.getElementById('user-role-display').textContent = CURRENT_USER.role==='admin'?'관리자':'일반 사용자';
-if(CURRENT_USER.role==='admin') document.getElementById('nav-admin').style.display='flex';
-document.getElementById('my-uid').textContent=CURRENT_USER.id;
-document.getElementById('my-name').textContent=CURRENT_USER.name;
-document.getElementById('my-role').innerHTML=CURRENT_USER.role==='admin'
-  ?'<span class="badge badge-admin">관리자</span>':'<span class="badge badge-ok">일반 사용자</span>';
-loadCorpSuggestions();
+if(CURRENT_USER.role==='admin'){
+  document.getElementById('nav-admin').style.display='flex';
+  document.getElementById('btn-add-corp').style.display='inline-flex';
+  document.getElementById('corps-desc').textContent='전체 법인 목록입니다. 법인을 추가하고 담당자를 지정하세요.';
+  document.getElementById('corps-action-th').style.display='';
+}
+loadCorpSelect();
 
+// ── Navigation ──
 function nav(page){
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
-  const pageIds=['upload','result','detail','history','admin','mypage'];
-  const navIdx=[0,1,2,3,4,5]; // indices in nav-item list
-  const allNavItems=document.querySelectorAll('.nav-item');
-  const idx=pageIds.indexOf(page);
-  // find nav item by onclick
-  allNavItems.forEach(el=>{if(el.getAttribute('onclick')&&el.getAttribute('onclick').includes(`'${page}'`))el.classList.add('active');});
+  document.querySelectorAll('.nav-item').forEach(el=>{if(el.getAttribute('onclick')&&el.getAttribute('onclick').includes(`'${page}'`))el.classList.add('active');});
   document.getElementById('page-'+page).classList.add('active');
-  const titles={upload:'거래 업로드',result:'분석 결과',detail:'상세 조회',history:'패턴 학습 데이터',admin:'계정 관리',mypage:'내 계정'};
+  const titles={upload:'거래 업로드',result:'분석 결과',detail:'상세 조회',corps:'법인 관리',admin:'계정 관리',mypage:'내 계정'};
   document.getElementById('topbar-title').textContent=titles[page]||'';
+  if(page==='corps') loadCorpsPage();
   if(page==='admin'){loadUsersPage();loadAuditLog();}
-  if(page==='history') loadHistoryPage();
 }
 
-async function loadCorpSuggestions(){
-  try{const r=await fetch('/api/corporations');const d=await r.json();
-  const dl=document.getElementById('corp-suggestions');
-  dl.innerHTML=d.corporations.map(c=>`<option value="${c}">`).join('');}catch(e){}
+// ── Corp Select (업로드용) ──
+async function loadCorpSelect(){
+  const res=await fetch('/api/corps');
+  if(res.status===401){window.location.href='/login';return;}
+  allCorps=await res.json();
+  const sel=document.getElementById('corp-select');
+  sel.innerHTML='<option value="">-- 법인을 선택하세요 --</option>';
+  if(!allCorps.length){
+    document.getElementById('no-corp-msg').style.display='block';
+  } else {
+    document.getElementById('no-corp-msg').style.display='none';
+    allCorps.forEach(c=>{
+      const opt=document.createElement('option');
+      opt.value=c.id; opt.textContent=c.name;
+      sel.appendChild(opt);
+    });
+  }
 }
 
+// ── Upload ──
 function dragOver(e){e.preventDefault();document.getElementById('upload-zone').classList.add('dragover');}
 function dragLeave(){document.getElementById('upload-zone').classList.remove('dragover');}
 function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)showPreview(f);}
@@ -405,7 +430,7 @@ function showPreview(file){
   reader.onload=function(e){
     try{
       let rows;
-      if(ext==='csv'){rows=parseCSV(e.target.result);}
+      if(ext==='csv') rows=parseCSV(e.target.result);
       else{const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
       renderPreview(rows,file.name);
     }catch(err){toast('파일 읽기 오류: '+err.message);}
@@ -433,12 +458,14 @@ function renderPreview(rows,filename){
 function resetFile(){currentFile=null;document.getElementById('file-input').value='';document.getElementById('preview-card').style.display='none';}
 
 async function submitFile(){
-  const corp=document.getElementById('corp-input').value.trim();
+  const selCorpId=document.getElementById('corp-select').value;
   const fileType=document.getElementById('file-type-select').value;
-  if(!corp){toast('법인명을 입력해주세요.');return;}
+  if(!selCorpId){toast('법인을 선택해주세요.');return;}
   if(!currentFile){toast('파일을 선택해주세요.');return;}
+
+  const selCorp=allCorps.find(c=>c.id===selCorpId);
   showProgress('파일 분석 중...','거래 데이터를 처리하고 있습니다.',30);
-  const fd=new FormData();fd.append('file',currentFile);fd.append('corp_name',corp);fd.append('file_type',fileType);
+  const fd=new FormData();fd.append('file',currentFile);fd.append('corp_id',selCorpId);fd.append('file_type',fileType);
   try{
     setProgress(60);
     const res=await fetch('/api/upload',{method:'POST',body:fd});
@@ -447,8 +474,13 @@ async function submitFile(){
     setProgress(90);
     if(data.error){hideProgress();toast('오류: '+data.error);return;}
     await delay(300);hideProgress();
-    if(data.type==='history'){toast(data.message);loadCorpSuggestions();resetFile();}
-    else{corpName=data.corp_name;analyzedData=data.results;renderResult(data);renderDetail();nav('result');toast(`분석 완료 · 이상 ${data.danger}건 / 주의 ${data.warning}건`);}
+    if(data.type==='history'){toast(data.message);resetFile();}
+    else{
+      corpName=data.corp_name;corpId=selCorpId;
+      analyzedData=data.results;
+      renderResult(data);renderDetail();nav('result');
+      toast(`분석 완료 · 이상 ${data.danger}건 / 주의 ${data.warning}건`);
+    }
   }catch(e){hideProgress();toast('서버 오류가 발생했습니다.');}
 }
 
@@ -458,7 +490,7 @@ function renderResult(data){
   document.getElementById('detail-empty').style.display='none';
   document.getElementById('detail-content').style.display='block';
   document.getElementById('result-title').textContent=data.corp_name;
-  const histNote=data.has_history?'패턴 학습 데이터 적용':'패턴 데이터 없음 (금액 규칙만 적용)';
+  const histNote=data.has_history?'패턴 학습 데이터 적용':`누적 거래처 ${data.cumul_payees||0}개 학습 중`;
   document.getElementById('result-subtitle').textContent=`${new Date().toLocaleDateString('ko-KR')} · 총 ${data.total}건 · ${histNote} · 분석: ${data.analyzed_by}`;
   document.getElementById('topbar-meta').textContent=data.corp_name;
   const amtB=(data.total_amount/1e8).toFixed(1);
@@ -483,7 +515,6 @@ function rowHtml(r,showMemo=true){
   h+=`<td style="text-align:center">${badgeHtml(r.risk)}</td><td>${reasons}</td></tr>`;
   return h;
 }
-
 function badgeHtml(risk){const c={'이상':'badge-danger','주의':'badge-warning','정상':'badge-ok'};return`<span class="badge ${c[risk]||'badge-ok'}">${risk}</span>`;}
 
 function renderDetail(){
@@ -504,23 +535,100 @@ async function exportCSV(){
   toast('CSV 파일 다운로드 완료');
 }
 
-async function loadHistoryPage(){
-  const res=await fetch('/api/corporations');const data=await res.json();
-  const wrap=document.getElementById('history-list-wrap');
-  if(!data.corporations.length){wrap.innerHTML=`<div class="empty"><div class="empty-icon">⊙</div><p>저장된 학습 데이터가 없습니다.</p></div>`;return;}
-  wrap.innerHTML=`<ul class="corp-list">${data.corporations.map(c=>`<li><div><div style="font-weight:500;font-size:14px">${c}</div><div style="font-size:12px;color:var(--text3);font-family:var(--mono)">학습 데이터 저장됨</div></div><button class="btn btn-danger-outline btn-sm" onclick="deleteHistory('${c}')">삭제</button></li>`).join('')}</ul>`;
+// ── Corps page ──
+async function loadCorpsPage(){
+  const res=await fetch('/api/corps');
+  allCorps=await res.json();
+  const h=await fetch('/api/corporations').then(r=>r.json()).catch(()=>({corporations:[]}));
+  const histCorps=new Set(h.corporations||[]);
+
+  const isAdmin=CURRENT_USER.role==='admin';
+  let usersMap={};
+  if(isAdmin){
+    const ur=await fetch('/api/admin/users');
+    const ul=await ur.json();
+    ul.forEach(u=>usersMap[u.id]=u.name);
+    allUsers=ul;
+  }
+
+  const tbody=document.getElementById('corps-tbody');
+  if(!allCorps.length){
+    tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">${isAdmin?'등록된 법인이 없습니다. + 법인 추가 버튼을 눌러 추가하세요.':'담당 법인이 없습니다. 관리자에게 문의하세요.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML=allCorps.map(c=>{
+    const managerName=usersMap[c.manager]||c.manager||'-';
+    const hasHist=histCorps.has(c.name);
+    const hasCumul=histCorps.has(c.name+'__cumul__')||false;
+    return`<tr>
+      <td style="font-weight:500">${c.name}</td>
+      <td>${managerName}</td>
+      <td>${hasHist?'<span class="badge badge-ok">등록됨</span>':'<span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border)">미등록</span>'}</td>
+      <td style="font-family:var(--mono);font-size:12px;color:var(--text2)">분석 누적 중</td>
+      ${isAdmin?`<td><div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="openCorpEditModal('${c.id}','${c.name}','${c.manager}')">수정</button>
+        <button class="btn btn-danger-outline btn-sm" onclick="deleteCorp('${c.id}','${c.name}')">삭제</button>
+      </div></td>`:''}
+    </tr>`;
+  }).join('');
 }
 
-async function deleteHistory(corp){
-  if(!confirm(`'${corp}' 학습 데이터를 삭제할까요?`))return;
-  await fetch(`/api/history/${encodeURIComponent(corp)}`,{method:'DELETE'});
-  toast(`'${corp}' 삭제 완료`);loadHistoryPage();loadCorpSuggestions();
+async function openCorpModal(){
+  editCorpId='';
+  document.getElementById('corp-modal-title').textContent='법인 추가';
+  document.getElementById('corp-modal-btn').textContent='추가';
+  document.getElementById('corp-name-input').value='';
+  document.getElementById('corp-error').style.display='none';
+  await loadManagerSelect('');
+  document.getElementById('corp-modal').classList.add('active');
 }
 
-// Admin
-async function loadUsersPage(){
+async function openCorpEditModal(id,name,manager){
+  editCorpId=id;
+  document.getElementById('corp-modal-title').textContent='법인 수정';
+  document.getElementById('corp-modal-btn').textContent='저장';
+  document.getElementById('corp-name-input').value=name;
+  document.getElementById('corp-error').style.display='none';
+  await loadManagerSelect(manager);
+  document.getElementById('corp-modal').classList.add('active');
+}
+
+async function loadManagerSelect(currentManager){
   const res=await fetch('/api/admin/users');
-  if(res.status===403)return;
+  const users=await res.json();
+  const sel=document.getElementById('corp-manager-select');
+  sel.innerHTML=users.map(u=>`<option value="${u.id}" ${u.id===currentManager?'selected':''}>${u.name} (${u.id})</option>`).join('');
+}
+
+async function saveCorpModal(){
+  const name=document.getElementById('corp-name-input').value.trim();
+  const manager=document.getElementById('corp-manager-select').value;
+  const errEl=document.getElementById('corp-error');
+  if(!name){errEl.textContent='법인명을 입력해주세요.';errEl.style.display='block';return;}
+
+  let res;
+  if(editCorpId){
+    res=await fetch(`/api/corps/${editCorpId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,manager})});
+  } else {
+    res=await fetch('/api/corps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,manager})});
+  }
+  const data=await res.json();
+  if(!data.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  closeModal('corp-modal');toast(data.message);
+  loadCorpsPage();loadCorpSelect();
+}
+
+async function deleteCorp(id,name){
+  if(!confirm(`'${name}' 법인을 삭제할까요?\n관련 학습 데이터도 함께 삭제됩니다.`))return;
+  const res=await fetch(`/api/corps/${id}`,{method:'DELETE'});
+  const data=await res.json();
+  if(data.ok){toast(data.message);loadCorpsPage();loadCorpSelect();}
+  else toast('오류: '+data.error);
+}
+
+// ── Admin ──
+async function loadUsersPage(){
+  const res=await fetch('/api/admin/users');if(res.status===403)return;
   const users=await res.json();
   document.getElementById('users-tbody').innerHTML=users.map(u=>`
     <tr>
@@ -528,12 +636,10 @@ async function loadUsersPage(){
       <td>${u.name}</td>
       <td>${u.role==='admin'?'<span class="badge badge-admin">관리자</span>':'<span class="badge badge-ok">일반</span>'}</td>
       <td style="font-size:11px;color:var(--text3);font-family:var(--mono)">${u.created_at?u.created_at.slice(0,10):'-'}</td>
-      <td>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="openResetModal('${u.id}','${u.name}')">PW 초기화</button>
-          ${u.id!==CURRENT_USER.id?`<button class="btn btn-danger-outline btn-sm" onclick="deleteUser('${u.id}','${u.name}')">삭제</button>`:''}
-        </div>
-      </td>
+      <td><div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="openResetModal('${u.id}','${u.name}')">PW 초기화</button>
+        ${u.id!==CURRENT_USER.id?`<button class="btn btn-danger-outline btn-sm" onclick="deleteUser('${u.id}','${u.name}')">삭제</button>`:''}
+      </div></td>
     </tr>`).join('');
 }
 
@@ -541,12 +647,7 @@ async function loadAuditLog(){
   const res=await fetch('/api/admin/audit');const data=await res.json();
   const el=document.getElementById('audit-log');
   if(!data.logs.length){el.textContent='로그 없음';return;}
-  el.innerHTML=data.logs.map(l=>{
-    let cls='';
-    if(l.includes('LOGIN_FAIL')||l.includes('이상'))cls='log-danger';
-    else if(l.includes('LOGIN_OK')||l.includes('OK'))cls='log-ok';
-    return`<div class="${cls}">${l}</div>`;
-  }).join('');
+  el.innerHTML=data.logs.map(l=>{let cls='';if(l.includes('LOGIN_FAIL')||l.includes('이상'))cls='log-danger';else if(l.includes('LOGIN_OK')||l.includes('OK'))cls='log-ok';return`<div class="${cls}">${l}</div>`;}).join('');
 }
 
 function openCreateModal(){
@@ -554,7 +655,6 @@ function openCreateModal(){
   document.getElementById('create-error').style.display='none';
   document.getElementById('create-modal').classList.add('active');
 }
-
 async function createUser(){
   const name=document.getElementById('new-name').value.trim();
   const uid=document.getElementById('new-uid').value.trim();
@@ -574,7 +674,6 @@ function openResetModal(uid,name){
   document.getElementById('reset-error').style.display='none';
   document.getElementById('reset-modal').classList.add('active');
 }
-
 async function doResetPw(){
   const pw=document.getElementById('reset-pw').value.trim();
   const errEl=document.getElementById('reset-error');
@@ -583,22 +682,19 @@ async function doResetPw(){
   if(!data.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
   closeModal('reset-modal');toast(data.message);loadAuditLog();
 }
-
 async function deleteUser(uid,name){
-  if(!confirm(`'${name}' 계정을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`))return;
+  if(!confirm(`'${name}' 계정을 삭제할까요?`))return;
   const res=await fetch(`/api/admin/users/${uid}`,{method:'DELETE'});const data=await res.json();
   if(data.ok){toast(data.message);loadUsersPage();}else toast('오류: '+data.error);
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('active');}
 
-// My page pw change
 async function changeMyPw(){
   const old=document.getElementById('old-pw').value;
   const nw=document.getElementById('new-pw').value;
   const nw2=document.getElementById('new-pw2').value;
-  const errEl=document.getElementById('pw-error');
-  errEl.style.display='none';
+  const errEl=document.getElementById('pw-error');errEl.style.display='none';
   if(nw!==nw2){errEl.textContent='새 비밀번호가 일치하지 않습니다.';errEl.style.display='block';return;}
   const res=await fetch('/api/me/password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({old_password:old,new_password:nw})});
   const data=await res.json();
@@ -607,17 +703,11 @@ async function changeMyPw(){
 }
 
 function doLogout(){window.location.href='/logout';}
-
-// Progress
 function showProgress(t,m,p){document.getElementById('prog-title').textContent=t;document.getElementById('prog-msg').textContent=m;document.getElementById('prog-fill').style.width=p+'%';document.getElementById('progress-overlay').classList.add('active');}
 function setProgress(p){document.getElementById('prog-fill').style.width=p+'%';}
 function hideProgress(){document.getElementById('progress-overlay').classList.remove('active');}
-
-// Toast
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3200);}
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
-
-// Close modal on overlay click
 document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('active');}));
 </script>
 </body>
