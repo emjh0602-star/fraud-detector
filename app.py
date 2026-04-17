@@ -1,16 +1,21 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
+from werkzeug.security import generate_password_hash, check_password_hash
 import pandas as pd
 import numpy as np
-import json, os, io, re, hashlib, secrets
+import json, os, io, re, secrets
 from datetime import datetime, timedelta
 from collections import defaultdict
 from functools import wraps
+import threading
+
+# 파일 동시 쓰기 보호용 락
+_file_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 app.permanent_session_lifetime = timedelta(hours=24)
 
-DATA_DIR = "data"
+DATA_DIR = os.environ.get("DATA_DIR", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 USERS_FILE   = os.path.join(DATA_DIR, "users.json")
@@ -20,7 +25,15 @@ RESULTS_FILE = os.path.join(DATA_DIR, "results.json")
 
 # ── 유틸 ──────────────────────────────────────────────
 def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+    return generate_password_hash(pw)
+
+def verify_pw(stored_hash, pw):
+    """기존 SHA256 해시와 새 werkzeug 해시 모두 지원"""
+    if stored_hash.startswith(("pbkdf2:", "scrypt:")):
+        return check_password_hash(stored_hash, pw)
+    # 기존 SHA256 해시 호환 (마이그레이션 전 계정)
+    import hashlib
+    return stored_hash == hashlib.sha256(pw.encode()).hexdigest()
 
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -32,7 +45,7 @@ def load_users():
     return default
 
 def save_users(u):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
+    with _file_lock, open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(u, f, ensure_ascii=False, indent=2)
 
 def load_corps():
@@ -42,7 +55,7 @@ def load_corps():
     return []  # [{"id": "corp_001", "name": "(주)ABC코리아", "manager": "hong"}]
 
 def save_corps(corps):
-    with open(CORPS_FILE, "w", encoding="utf-8") as f:
+    with _file_lock, open(CORPS_FILE, "w", encoding="utf-8") as f:
         json.dump(corps, f, ensure_ascii=False, indent=2)
 
 def audit(action, detail=""):
@@ -63,11 +76,11 @@ def load_results():
     return {}
 
 def save_results(r):
-    with open(RESULTS_FILE, "w", encoding="utf-8") as f:
+    with _file_lock, open(RESULTS_FILE, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False, indent=2)
 
 def save_history(h):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+    with _file_lock, open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(h, f, ensure_ascii=False, indent=2)
 
 # ── 인증 데코레이터 ───────────────────────────────────
@@ -105,9 +118,13 @@ def login():
     uid, pw = d.get("username","").strip(), d.get("password","")
     users = load_users()
     user  = users.get(uid)
-    if not user or user["password"] != hash_pw(pw):
+    if not user or not verify_pw(user["password"], pw):
         audit("LOGIN_FAIL", uid)
         return jsonify({"error": "아이디 또는 비밀번호가 올바르지 않습니다."}), 401
+    # 기존 SHA256 해시를 안전한 해시로 자동 마이그레이션
+    if not user["password"].startswith(("pbkdf2:", "scrypt:")):
+        users[uid]["password"] = hash_pw(pw)
+        save_users(users)
     session.permanent = True
     session["user"] = uid
     session["name"] = user["name"]
@@ -146,7 +163,7 @@ def create_corp():
     corps = load_corps()
     if any(c["name"] == name for c in corps):
         return jsonify({"error": "이미 등록된 법인명입니다."}), 409
-    corp_id = f"corp_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    corp_id = f"corp_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
     corps.append({"id": corp_id, "name": name, "manager": manager,
                   "created_at": datetime.now().isoformat()})
     save_corps(corps)
@@ -248,12 +265,17 @@ def upload():
     if file_type == "history":
         h = load_history()
         existing = h.get(corp_name, [])
-        existing_payees = {r.get("payee","") for r in existing if r.get("payee")}
+        # payee+amount+date 조합으로 중복 체크 (같은 거래처 다른 거래도 학습)
+        existing_keys = {
+            (r.get("payee",""), str(r.get("amount","")), r.get("date",""))
+            for r in existing
+        }
         if not existing:
             h[corp_name] = rows
             saved_count = len(rows)
         else:
-            new_rows = [r for r in rows if r.get("payee","") not in existing_payees]
+            new_rows = [r for r in rows
+                        if (r.get("payee",""), str(r.get("amount","")), r.get("date","")) not in existing_keys]
             h[corp_name] = existing + new_rows
             saved_count = len(new_rows)
         save_history(h)
@@ -271,13 +293,17 @@ def upload():
     danger  = sum(1 for r in results if r["risk"]=="이상")
     audit("ANALYZE", f"{corp_name} {len(results)}건 ({file_count}개 파일) → 이상{danger}")
 
-    # 누적 학습
+    # 누적 학습 (payee+amount+date 조합으로 중복 제거)
     cumul_key = corp_name + "__cumul__"
     existing_cumul = h.get(cumul_key, [])
-    existing_payees = {r.get("payee","") for r in existing_cumul}
+    existing_keys = {
+        (r.get("payee",""), str(r.get("amount","")), r.get("date",""))
+        for r in existing_cumul
+    }
     new_rows = [{"payee": r.get("payee",""), "amount": r.get("amount",""),
                  "account": r.get("account",""), "date": r.get("date","")}
-                for r in rows if r.get("payee","") not in existing_payees and r.get("payee","")]
+                for r in rows if r.get("payee","") and
+                (r.get("payee",""), str(r.get("amount","")), r.get("date","")) not in existing_keys]
     h[cumul_key] = existing_cumul + new_rows
     save_history(h)
 
@@ -318,9 +344,14 @@ def upload():
 @app.route("/api/results/<corp_name>", methods=["GET"])
 @login_required
 def get_results(corp_name):
+    # 관리자 또는 해당 법인 담당자만 조회 가능
+    if session["role"] != "admin":
+        corps = load_corps()
+        corp = next((c for c in corps if c["name"] == corp_name), None)
+        if not corp or corp.get("manager") != session["user"]:
+            return jsonify({"error": "담당 법인이 아닙니다."}), 403
     saved = load_results()
     entries = saved.get(corp_name, [])
-    # results 데이터는 제외하고 요약만 반환 (목록용)
     summary = [{"date": e["date"], "total": e["total"], "danger": e["danger"],
                 "warning": e["warning"], "ok": e["ok"], "total_amount": e["total_amount"],
                 "analyzed_by": e["analyzed_by"]} for e in entries]
@@ -329,6 +360,12 @@ def get_results(corp_name):
 @app.route("/api/results/<corp_name>/<int:idx>", methods=["GET"])
 @login_required
 def get_result_detail(corp_name, idx):
+    # 관리자 또는 해당 법인 담당자만 조회 가능
+    if session["role"] != "admin":
+        corps = load_corps()
+        corp = next((c for c in corps if c["name"] == corp_name), None)
+        if not corp or corp.get("manager") != session["user"]:
+            return jsonify({"error": "담당 법인이 아닙니다."}), 403
     saved = load_results()
     entries = saved.get(corp_name, [])
     if idx >= len(entries):
@@ -354,6 +391,12 @@ def export_csv():
 @app.route("/api/history/<corp_name>", methods=["DELETE"])
 @login_required
 def delete_history(corp_name):
+    # 관리자 또는 해당 법인 담당자만 삭제 가능
+    if session["role"] != "admin":
+        corps = load_corps()
+        corp = next((c for c in corps if c["name"] == corp_name), None)
+        if not corp or corp.get("manager") != session["user"]:
+            return jsonify({"error": "담당 법인이 아닙니다."}), 403
     h = load_history()
     for key in [corp_name, corp_name+"__cumul__"]:
         if key in h: del h[key]
@@ -427,7 +470,7 @@ def change_own_password():
     d = request.get_json() or {}
     old_pw,new_pw = d.get("old_password",""),d.get("new_password","").strip()
     users = load_users(); me = users.get(session["user"])
-    if not me or me["password"] != hash_pw(old_pw):
+    if not me or not verify_pw(me["password"], old_pw):
         return jsonify({"error": "현재 비밀번호가 올바르지 않습니다."}), 401
     if len(new_pw) < 8: return jsonify({"error": "새 비밀번호는 8자 이상이어야 합니다."}), 400
     users[session["user"]]["password"] = hash_pw(new_pw); save_users(users)
@@ -545,100 +588,6 @@ def smart_parse_excel(file_obj, filename):
 
     return all_rows
 
-    # 아래 코드는 parse_single_sheet로 이동됨 (하위 호환성 유지)
-    ws = wb.active
-    header_row = None
-    best_row = None
-    best_matches = 0
-    for i in range(1, min(60, ws.max_row+1)):
-        row_vals = [str(ws.cell(i,c).value or '') for c in range(1, min(20, ws.max_column+1))]
-        matches = sum(1 for k in header_keywords if any(k in v for v in row_vals))
-        if matches > best_matches:
-            best_matches = matches
-            best_row = i
-        if matches >= 5:
-            header_row = i
-            break
-    if not header_row and best_matches >= 3:
-        header_row = best_row
-
-    if not header_row:
-        # 헤더 못 찾으면 첫 번째 행을 헤더로 사용
-        header_row = 1
-
-    # 헤더 컬럼 매핑
-    headers = {}
-    for c in range(1, ws.max_column+1):
-        val = str(ws.cell(header_row, c).value or '').strip()
-        if not val: continue
-        v = val.lower().replace(' ','')
-        if any(k in v for k in ['일자','date','날짜','거래일']): headers[c] = 'date'
-        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주','거래처명']): 
-            if 'payee' not in headers.values(): headers[c] = 'payee'
-        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액','원화금액','지급금액']):
-            if 'amount' not in headers.values(): headers[c] = 'amount'
-        elif any(k in v for k in ['계좌번호','account','계좌']):
-            if 'account' not in headers.values(): headers[c] = 'account'
-        elif any(k in v for k in ['은행','bank']):
-            if 'bank' not in headers.values(): headers[c] = 'bank'
-        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용','계정과목']):
-            if 'memo' not in headers.values(): headers[c] = 'memo'
-
-    # 역방향 매핑 (첫번째 매칭만 사용)
-    col_map = {}
-    used = set()
-    for c, field in headers.items():
-        if field not in used:
-            col_map[c] = field
-            used.add(field)
-
-    # 수취인 컬럼이 없으면 두 번째로 긴 텍스트 컬럼 추정
-    if 'payee' not in col_map.values():
-        for c in range(1, ws.max_column+1):
-            val = str(ws.cell(header_row, c).value or '').strip()
-            if val and c not in col_map:
-                col_map[c] = 'payee'
-                break
-
-    # 데이터 추출 (합계/섹션 제목 행 건너뜀)
-    rows = []
-    for i in range(header_row+1, ws.max_row+1):
-        # 수취인 컬럼 확인
-        payee_col = next((c for c,f in col_map.items() if f=='payee'), None)
-        amt_col   = next((c for c,f in col_map.items() if f=='amount'), None)
-
-        payee_val = str(ws.cell(i, payee_col).value or '').strip() if payee_col else ''
-        amt_val   = ws.cell(i, amt_col).value if amt_col else None
-
-        if not payee_val: continue
-        # 합계/섹션 행 건너뜀
-        if any(k in payee_val for k in SKIP_KEYWORDS): continue
-        if payee_val in ['거래처','수취인','업체명']: continue
-
-        # 금액 검증 (숫자여야 함)
-        try:
-            amt_num = float(re.sub(r'[^0-9.]', '', str(amt_val))) if amt_val else 0
-        except:
-            amt_num = 0
-
-        row = {'payee': payee_val}
-        for c, field in col_map.items():
-            val = ws.cell(i, c).value
-            if field == 'amount':
-                row['amount'] = amt_num
-            elif field == 'account':
-                # 계좌번호: 은행명과 합치기
-                bank_col = next((bc for bc,bf in col_map.items() if bf=='bank'), None)
-                bank = str(ws.cell(i, bank_col).value or '').strip() if bank_col else ''
-                acct = str(val or '').strip()
-                row['account'] = f"{bank} {acct}".strip() if bank else acct
-            elif field not in ['payee','bank']:
-                row[field] = str(val or '').strip()
-
-        rows.append(row)
-
-    return rows
-
 def normalize_columns(df):
     """기존 pandas DataFrame 방식 - 단순 구조 엑셀용"""
     col_map = {}
@@ -736,9 +685,18 @@ def analyze_transactions(rows, corp_name, history):
 
     avg_amt = np.mean(hist_amounts) if hist_amounts else 0
     p95_amt = np.percentile(hist_amounts,95) if hist_amounts else 0
-    
+
     # 패턴 통계 계산
+    global pattern_stats
     pattern_stats = calc_pattern_stats(all_history)
+
+    # 날짜별 수취인 건수 (당일 반복 감지용)
+    date_payee_count = defaultdict(lambda: defaultdict(int))
+    for r in rows:
+        date_str = str(r.get("date","")).strip()
+        payee = r.get("payee","")
+        if payee:
+            date_payee_count[date_str][payee] += 1
 
     payee_count, amount_count = defaultdict(int), defaultdict(int)
     for r in rows:
@@ -764,7 +722,9 @@ def analyze_transactions(rows, corp_name, history):
         if payee and not has_any_history:
             reasons.append("거래처 이력 없음 (패턴 학습 필요)")
 
-        if payee_count.get(payee,0)>=3: reasons.append(f"동일 수취인 {payee_count[payee]}건 반복"); score+=1
+        date_str = str(r.get("date","")).strip()
+        daily_count = date_payee_count[date_str].get(payee, 0) if date_str else payee_count.get(payee, 0)
+        if daily_count>=3: reasons.append(f"동일 수취인 당일 {daily_count}건 반복"); score+=1
         if re.search(r"긴급|급건|urgent|즉시|당일처리",str(r.get("memo","")),re.I): reasons.append("긴급 처리 요청"); score+=1
         if amount_count.get(str(r.get("amount","")),0)>=3 and amt>0: reasons.append("동일 금액 3건 이상 반복"); score+=1
         acct = str(r.get("account","")).strip()
