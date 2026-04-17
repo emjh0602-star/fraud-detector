@@ -396,14 +396,21 @@ def smart_parse_excel(file_obj, filename):
     ws = wb.active
 
     # 헤더 행 자동 탐지 (키워드 매칭)
-    header_keywords = ['거래처','수취인','금액','계좌','적요','계정','은행','날짜','일자','이체']
+    header_keywords = ['거래처','수취인','금액','계좌','적요','계정','은행','날짜','일자','이체','거래처명','원화금액','계정과목','지급금액']
     header_row = None
-    for i in range(1, min(20, ws.max_row+1)):
+    best_row = None
+    best_matches = 0
+    for i in range(1, min(60, ws.max_row+1)):
         row_vals = [str(ws.cell(i,c).value or '') for c in range(1, min(20, ws.max_column+1))]
         matches = sum(1 for k in header_keywords if any(k in v for v in row_vals))
-        if matches >= 2:
+        if matches > best_matches:
+            best_matches = matches
+            best_row = i
+        if matches >= 5:
             header_row = i
             break
+    if not header_row and best_matches >= 3:
+        header_row = best_row
 
     if not header_row:
         # 헤더 못 찾으면 첫 번째 행을 헤더로 사용
@@ -416,17 +423,15 @@ def smart_parse_excel(file_obj, filename):
         if not val: continue
         v = val.lower().replace(' ','')
         if any(k in v for k in ['일자','date','날짜','거래일']): headers[c] = 'date'
-        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주']): 
-            if 'date' not in headers.values(): headers[c] = 'payee'
-            elif 'payee' not in headers.values(): headers[c] = 'payee'
-            else: headers[c] = 'payee'
-        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액']):
+        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주','거래처명']): 
+            if 'payee' not in headers.values(): headers[c] = 'payee'
+        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액','원화금액','지급금액']):
             if 'amount' not in headers.values(): headers[c] = 'amount'
         elif any(k in v for k in ['계좌번호','account','계좌']):
             if 'account' not in headers.values(): headers[c] = 'account'
         elif any(k in v for k in ['은행','bank']):
             if 'bank' not in headers.values(): headers[c] = 'bank'
-        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용']):
+        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용','계정과목']):
             if 'memo' not in headers.values(): headers[c] = 'memo'
 
     # 역방향 매핑 (첫번째 매칭만 사용)
