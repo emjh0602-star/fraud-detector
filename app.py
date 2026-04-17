@@ -392,7 +392,7 @@ def smart_parse_excel(file_obj, filename):
     from io import BytesIO
 
     file_obj.seek(0)
-    wb = openpyxl.load_workbook(BytesIO(file_obj.read()), data_only=True)
+    wb = openpyxl.load_workbook(BytesIO(file_obj.read()), data_only=True, read_only=True)
     ws = wb.active
 
     # 헤더 행 자동 탐지 (키워드 매칭)
