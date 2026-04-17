@@ -451,7 +451,7 @@ function showMultiPreview(files){
       let rows;
       if(ext==='csv') rows=parseCSV(e.target.result);
       else{const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
-      const label=currentFiles.length>1?:file.name;
+      const label=currentFiles.length>1?(currentFiles.length+'개 파일 선택 (미리보기: '+currentFiles[0].name+')'):currentFiles[0].name;
       renderPreview(rows,label);
     }catch(err){toast('파일 읽기 오류: '+err.message);}
   };
