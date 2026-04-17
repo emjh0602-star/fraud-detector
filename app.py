@@ -16,6 +16,7 @@ HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 USERS_FILE   = os.path.join(DATA_DIR, "users.json")
 CORPS_FILE   = os.path.join(DATA_DIR, "corps.json")
 AUDIT_FILE   = os.path.join(DATA_DIR, "audit.log")
+RESULTS_FILE = os.path.join(DATA_DIR, "results.json")
 
 # ── 유틸 ──────────────────────────────────────────────
 def hash_pw(pw):
@@ -54,6 +55,16 @@ def load_history():
         with open(HISTORY_FILE, encoding="utf-8") as f:
             return json.load(f)
     return {}
+
+def load_results():
+    if os.path.exists(RESULTS_FILE):
+        with open(RESULTS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_results(r):
+    with open(RESULTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(r, f, ensure_ascii=False, indent=2)
 
 def save_history(h):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
@@ -270,6 +281,25 @@ def upload():
     h[cumul_key] = existing_cumul + new_rows
     save_history(h)
 
+    # 분석 결과 서버에 저장
+    saved_results = load_results()
+    if corp_name not in saved_results:
+        saved_results[corp_name] = []
+    entry = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "total": len(results),
+        "danger": danger,
+        "warning": sum(1 for r in results if r["risk"]=="주의"),
+        "ok": sum(1 for r in results if r["risk"]=="정상"),
+        "total_amount": sum(r["amount_clean"] for r in results),
+        "analyzed_by": session["name"],
+        "results": results
+    }
+    saved_results[corp_name].insert(0, entry)
+    # 최근 30개만 유지
+    saved_results[corp_name] = saved_results[corp_name][:30]
+    save_results(saved_results)
+
     return jsonify({
         "type": "analysis", "corp_name": corp_name,
         "total": len(results),
@@ -282,6 +312,26 @@ def upload():
         "results": results,
         "analyzed_by": session["name"]
     })
+
+@app.route("/api/results/<corp_name>", methods=["GET"])
+@login_required
+def get_results(corp_name):
+    saved = load_results()
+    entries = saved.get(corp_name, [])
+    # results 데이터는 제외하고 요약만 반환 (목록용)
+    summary = [{"date": e["date"], "total": e["total"], "danger": e["danger"],
+                "warning": e["warning"], "ok": e["ok"], "total_amount": e["total_amount"],
+                "analyzed_by": e["analyzed_by"]} for e in entries]
+    return jsonify({"entries": summary})
+
+@app.route("/api/results/<corp_name>/<int:idx>", methods=["GET"])
+@login_required
+def get_result_detail(corp_name, idx):
+    saved = load_results()
+    entries = saved.get(corp_name, [])
+    if idx >= len(entries):
+        return jsonify({"error": "존재하지 않는 결과입니다."}), 404
+    return jsonify(entries[idx])
 
 @app.route("/api/export", methods=["POST"])
 @login_required

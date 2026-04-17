@@ -188,7 +188,21 @@ tr:hover td{background:#fafaf6}
 
     <!-- 결과 -->
     <div class="page" id="page-result">
-      <div class="empty" id="resultEmpty"><div class="empty-icon">◈</div><p>분석 후 결과가 여기에 표시됩니다.</p></div>
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap" id="resultHistoryBar" style="display:none">
+        <div class="form-group">
+          <label>법인 선택</label>
+          <select id="histCorpSel" style="width:220px" onchange="loadResultHistory()">
+            <option value="">-- 법인을 선택하세요 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>분석 이력</label>
+          <select id="histEntrySel" style="width:260px" onchange="loadResultEntry()">
+            <option value="">-- 날짜를 선택하세요 --</option>
+          </select>
+        </div>
+      </div>
+      <div class="empty" id="resultEmpty"><div class="empty-icon">◈</div><p>분석 후 결과가 여기에 표시됩니다.<br><span style="font-size:12px;color:var(--text3)">또는 위에서 법인을 선택해 이전 결과를 불러오세요.</span></p></div>
       <div id="resultContent" style="display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
           <div>
@@ -383,6 +397,8 @@ loadCorpSel();
 
 function goPage(p){
   var pages=['upload','result','detail','corps','admin','mypage'];
+  // 결과 탭 이동시 이력 셀렉트 로드
+  if(p==='result') loadHistCorpSel();
   pages.forEach(function(n){
     document.getElementById('page-'+n).classList.remove('active');
     document.getElementById('nav-'+n) && document.getElementById('nav-'+n).classList.remove('active');
@@ -394,6 +410,55 @@ function goPage(p){
   document.getElementById('pageTitle').textContent=titles[p]||'';
   if(p==='corps') loadCorpsPage();
   if(p==='admin'){loadUsersPage();loadAuditLog();}
+}
+
+// 분석 이력 법인 셀렉트
+function loadHistCorpSel(){
+  var bar = document.getElementById('resultHistoryBar');
+  if(bar) bar.style.display='flex';
+  fetch('/api/corps').then(function(r){return r.json();}).then(function(corps){
+    var sel=document.getElementById('histCorpSel');
+    var cur=sel.value;
+    sel.innerHTML='<option value="">-- 법인을 선택하세요 --</option>';
+    corps.forEach(function(c){
+      sel.innerHTML+='<option value="'+c.id+'" data-name="'+c.name+'">'+c.name+'</option>';
+    });
+    if(cur) sel.value=cur;
+  });
+}
+
+function loadResultHistory(){
+  var sel=document.getElementById('histCorpSel');
+  var opt=sel.options[sel.selectedIndex];
+  if(!opt||!opt.value) return;
+  var name=opt.getAttribute('data-name');
+  fetch('/api/results/'+encodeURIComponent(name)).then(function(r){return r.json();}).then(function(data){
+    var entrySel=document.getElementById('histEntrySel');
+    entrySel.innerHTML='<option value="">-- 날짜를 선택하세요 --</option>';
+    data.entries.forEach(function(e,i){
+      entrySel.innerHTML+='<option value="'+i+'">'+e.date+' · 이상 '+e.danger+'건 / 주의 '+e.warning+'건</option>';
+    });
+    if(data.entries.length>0){
+      entrySel.value='0';
+      loadResultEntry();
+    }
+  });
+}
+
+function loadResultEntry(){
+  var corpSel=document.getElementById('histCorpSel');
+  var opt=corpSel.options[corpSel.selectedIndex];
+  if(!opt||!opt.value) return;
+  var name=opt.getAttribute('data-name');
+  var idx=document.getElementById('histEntrySel').value;
+  if(idx==='') return;
+  fetch('/api/results/'+encodeURIComponent(name)+'/'+idx).then(function(r){return r.json();}).then(function(data){
+    if(data.error){showToast(data.error);return;}
+    corpName=name;
+    analyzed=data.results;
+    renderResult(data);
+    renderDetail();
+  });
 }
 
 // 법인 셀렉트
