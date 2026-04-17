@@ -173,9 +173,9 @@ tr:hover td{background:#fafaf6}
                ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event)">
             <div class="upload-icon">📂</div>
             <div class="upload-title">엑셀 파일을 끌어다 놓거나 클릭해서 선택</div>
-            <div class="upload-hint" style="margin-top:6px">지원 형식: .xlsx · .xls · .csv &nbsp;|&nbsp; 컬럼: 거래일자, 수취인명, 금액, 계좌번호, 적요</div>
+            <div class="upload-hint" style="margin-top:6px">지원 형식: .xlsx · .xls · .csv &nbsp;|&nbsp; 여러 파일 동시 선택 가능 (Ctrl+클릭)</div>
           </div>
-          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="fileSelected(this)">
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" multiple onchange="fileSelected(this)">
         </div>
         <div class="card" id="preview-card" style="display:none">
           <div class="preview-info">
@@ -371,7 +371,7 @@ tr:hover td{background:#fafaf6}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const CURRENT_USER = { id:"{{ userid }}", name:"{{ username }}", role:"{{ role }}" };
-let currentFile=null, analyzedData=[], corpName='', corpId='', resetTargetUid='', editCorpId='';
+let currentFile=null, currentFiles=[], analyzedData=[], corpName='', corpId='', resetTargetUid='', editCorpId='';
 let allCorps=[], allUsers=[];
 
 // Init
@@ -419,8 +419,8 @@ async function loadCorpSelect(){
 // ── Upload ──
 function dragOver(e){e.preventDefault();document.getElementById('upload-zone').classList.add('dragover');}
 function dragLeave(){document.getElementById('upload-zone').classList.remove('dragover');}
-function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)showPreview(f);}
-function fileSelected(input){if(input.files[0])showPreview(input.files[0]);}
+function handleDrop(e){e.preventDefault();document.getElementById('upload-zone').classList.remove('dragover');if(e.dataTransfer.files.length>0)showMultiPreview(e.dataTransfer.files);}
+function fileSelected(input){if(input.files.length>0)showMultiPreview(input.files);}
 
 function showPreview(file){
   currentFile=file;
@@ -433,6 +433,26 @@ function showPreview(file){
       if(ext==='csv') rows=parseCSV(e.target.result);
       else{const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
       renderPreview(rows,file.name);
+    }catch(err){toast('파일 읽기 오류: '+err.message);}
+  };
+  if(ext==='csv')reader.readAsText(file,'utf-8');else reader.readAsBinaryString(file);
+}
+
+function showMultiPreview(files){
+  currentFiles=Array.from(files);
+  const invalid=currentFiles.filter(f=>!['xlsx','xls','csv'].includes(f.name.split('.').pop().toLowerCase()));
+  if(invalid.length){toast('xlsx, xls, csv 파일만 지원합니다.');return;}
+  // 첫 번째 파일만 미리보기
+  const file=currentFiles[0];
+  const ext=file.name.split('.').pop().toLowerCase();
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      let rows;
+      if(ext==='csv') rows=parseCSV(e.target.result);
+      else{const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{defval:''});}
+      const label=currentFiles.length>1?:file.name;
+      renderPreview(rows,label);
     }catch(err){toast('파일 읽기 오류: '+err.message);}
   };
   if(ext==='csv')reader.readAsText(file,'utf-8');else reader.readAsBinaryString(file);
@@ -455,17 +475,17 @@ function renderPreview(rows,filename){
   document.getElementById('preview-card').style.display='block';
 }
 
-function resetFile(){currentFile=null;document.getElementById('file-input').value='';document.getElementById('preview-card').style.display='none';}
+function resetFile(){currentFile=null;currentFiles=[];document.getElementById('file-input').value='';document.getElementById('preview-card').style.display='none';}
 
 async function submitFile(){
   const selCorpId=document.getElementById('corp-select').value;
   const fileType=document.getElementById('file-type-select').value;
   if(!selCorpId){toast('법인을 선택해주세요.');return;}
-  if(!currentFile){toast('파일을 선택해주세요.');return;}
+  if(!currentFiles.length){toast('파일을 선택해주세요.');return;}
 
   const selCorp=allCorps.find(c=>c.id===selCorpId);
   showProgress('파일 분석 중...','거래 데이터를 처리하고 있습니다.',30);
-  const fd=new FormData();fd.append('file',currentFile);fd.append('corp_id',selCorpId);fd.append('file_type',fileType);
+  const fd=new FormData();currentFiles.forEach(f=>fd.append('file',f));fd.append('corp_id',selCorpId);fd.append('file_type',fileType);
   try{
     setProgress(60);
     const res=await fetch('/api/upload',{method:'POST',body:fd});

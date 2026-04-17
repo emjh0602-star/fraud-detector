@@ -179,9 +179,9 @@ def delete_corp(corp_id):
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload():
-    if "file" not in request.files:
+    files     = request.files.getlist("file")  # 여러 파일 지원
+    if not files or all(f.filename == "" for f in files):
         return jsonify({"error": "파일이 없습니다."}), 400
-    file      = request.files["file"]
     corp_id   = request.form.get("corp_id","").strip()
     file_type = request.form.get("file_type","new")
 
@@ -197,26 +197,38 @@ def upload():
 
     corp_name = corp["name"]
 
-    try:
-        fname = file.filename.lower()
-        df = pd.read_csv(file, encoding="utf-8-sig") if fname.endswith(".csv") else pd.read_excel(file)
-    except Exception as e:
-        return jsonify({"error": f"파일 읽기 오류: {e}"}), 400
+    # 여러 파일 합치기
+    all_dfs = []
+    for file in files:
+        if file.filename == "": continue
+        try:
+            fname = file.filename.lower()
+            df = pd.read_csv(file, encoding="utf-8-sig") if fname.endswith(".csv") else pd.read_excel(file)
+            df = normalize_columns(df).fillna("")
+            # 어느 파일에서 왔는지 표시
+            df["_source_file"] = file.filename
+            all_dfs.append(df)
+        except Exception as e:
+            return jsonify({"error": f"파일 읽기 오류 ({file.filename}): {e}"}), 400
 
-    df   = normalize_columns(df).fillna("")
+    if not all_dfs:
+        return jsonify({"error": "읽을 수 있는 파일이 없습니다."}), 400
+
+    combined_df = pd.concat(all_dfs, ignore_index=True).fillna("")
     rows = [{k: str(v) if not isinstance(v,(int,float)) else v for k,v in r.items()}
-            for r in df.to_dict("records")]
+            for r in combined_df.to_dict("records")]
+    file_count = len(all_dfs)
 
     if file_type == "history":
         h = load_history(); h[corp_name] = rows; save_history(h)
-        audit("HISTORY_SAVE", f"{corp_name} {len(rows)}건")
-        return jsonify({"message": f"'{corp_name}' 과거 데이터 {len(rows)}건 저장 완료",
+        audit("HISTORY_SAVE", f"{corp_name} {len(rows)}건 ({file_count}개 파일)")
+        return jsonify({"message": f"'{corp_name}' 과거 데이터 {len(rows)}건 저장 완료 ({file_count}개 파일)",
                         "count": len(rows), "type": "history"})
 
     h       = load_history()
     results = analyze_transactions(rows, corp_name, h)
     danger  = sum(1 for r in results if r["risk"]=="이상")
-    audit("ANALYZE", f"{corp_name} {len(results)}건 → 이상{danger}")
+    audit("ANALYZE", f"{corp_name} {len(results)}건 ({file_count}개 파일) → 이상{danger}")
 
     # 누적 학습
     cumul_key = corp_name + "__cumul__"
