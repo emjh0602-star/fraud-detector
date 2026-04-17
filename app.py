@@ -10,7 +10,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 app.permanent_session_lifetime = timedelta(hours=8)
 
-DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
+DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
 HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 USERS_FILE   = os.path.join(DATA_DIR, "users.json")
@@ -235,10 +235,25 @@ def upload():
     file_count = len(files)
 
     if file_type == "history":
-        h = load_history(); h[corp_name] = rows; save_history(h)
-        audit("HISTORY_SAVE", f"{corp_name} {len(rows)}건 ({file_count}개 파일)")
-        return jsonify({"message": f"'{corp_name}' 과거 데이터 {len(rows)}건 저장 완료 ({file_count}개 파일)",
-                        "count": len(rows), "type": "history"})
+        h = load_history()
+        existing = h.get(corp_name, [])
+        existing_payees = {r.get("payee","") for r in existing if r.get("payee")}
+        if not existing:
+            h[corp_name] = rows
+            saved_count = len(rows)
+        else:
+            new_rows = [r for r in rows if r.get("payee","") not in existing_payees]
+            h[corp_name] = existing + new_rows
+            saved_count = len(new_rows)
+        save_history(h)
+        total_count = len(h[corp_name])
+        audit("HISTORY_SAVE", f"{corp_name} +{saved_count}건 (누적 {total_count}건)")
+        return jsonify({
+            "message": f"'{corp_name}' 패턴 학습 완료 · 신규 {saved_count}건 추가 (누적 {total_count}건)",
+            "count": saved_count,
+            "total": total_count,
+            "type": "history"
+        })
 
     h       = load_history()
     results = analyze_transactions(rows, corp_name, h)
