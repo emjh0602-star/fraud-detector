@@ -494,7 +494,7 @@ async function submitFile(){
     setProgress(90);
     if(data.error){hideProgress();toast('오류: '+data.error);return;}
     await delay(300);hideProgress();
-    if(data.type==='history'){toast(data.message);resetFile();}
+    if(data.type==='history'){showSuccessPopup(data.message);resetFile();loadCorpSelect();}
     else{
       corpName=data.corp_name;corpId=selCorpId;
       analyzedData=data.results;
@@ -573,23 +573,15 @@ async function loadCorpsPage(){
 
   const tbody=document.getElementById('corps-tbody');
   if(!allCorps.length){
-    tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">${isAdmin?'등록된 법인이 없습니다. + 법인 추가 버튼을 눌러 추가하세요.':'담당 법인이 없습니다. 관리자에게 문의하세요.'}</td></tr>`;
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">'+(isAdmin?'등록된 법인이 없습니다. + 법인 추가 버튼을 눌러 추가하세요.':'담당 법인이 없습니다. 관리자에게 문의하세요.')+'</td></tr>';
     return;
   }
-  tbody.innerHTML=allCorps.map(c=>{
-    const managerName=usersMap[c.manager]||c.manager||'-';
-    const hasHist=histCorps.has(c.name);
-    const hasCumul=histCorps.has(c.name+'__cumul__')||false;
-    return`<tr>
-      <td style="font-weight:500">${c.name}</td>
-      <td>${managerName}</td>
-      <td>${hasHist?'<span class="badge badge-ok">등록됨</span>':'<span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border)">미등록</span>'}</td>
-      <td style="font-family:var(--mono);font-size:12px;color:var(--text2)">분석 누적 중</td>
-      ${isAdmin?`<td><div style="display:flex;gap:6px">
-        <button class="btn btn-sm" onclick="openCorpEditModal('${c.id}','${c.name}','${c.manager}')">수정</button>
-        <button class="btn btn-danger-outline btn-sm" onclick="deleteCorp('${c.id}','${c.name}')">삭제</button>
-      </div></td>`:''}
-    </tr>`;
+  tbody.innerHTML=allCorps.map(function(c){
+    var managerName=usersMap[c.manager]||c.manager||'-';
+    var hasHist=histCorps.has(c.name);
+    var histBadge=hasHist?'<span class="badge badge-ok">등록됨</span>':'<span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border)">미등록</span>';
+    var adminBtns=isAdmin?('<td><div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="openCorpEditModal(''+c.id+'',''+c.name+'',''+c.manager+'')">수정</button><button class="btn btn-danger-outline btn-sm" onclick="deleteCorp(''+c.id+'',''+c.name+'')">삭제</button></div></td>'):'';
+    return '<tr><td style="font-weight:500">'+c.name+'</td><td>'+managerName+'</td><td>'+histBadge+'</td><td style="font-family:var(--mono);font-size:12px;color:var(--text2)">분석 누적 중</td>'+adminBtns+'</tr>';
   }).join('');
 }
 
@@ -726,6 +718,17 @@ function doLogout(){window.location.href='/logout';}
 function showProgress(t,m,p){document.getElementById('prog-title').textContent=t;document.getElementById('prog-msg').textContent=m;document.getElementById('prog-fill').style.width=p+'%';document.getElementById('progress-overlay').classList.add('active');}
 function setProgress(p){document.getElementById('prog-fill').style.width=p+'%';}
 function hideProgress(){document.getElementById('progress-overlay').classList.remove('active');}
+function showSuccessPopup(msg){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(26,25,23,0.5);z-index:500;display:flex;align-items:center;justify-content:center;';
+  const box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:12px;padding:36px 44px;text-align:center;min-width:320px;max-width:440px;';
+  box.innerHTML='<div style="font-size:36px;margin-bottom:12px">✅</div><h3 style="font-size:16px;font-weight:500;margin-bottom:8px">저장 완료!</h3><p style="font-size:13px;color:#6b6860;margin-bottom:20px">'+msg+'</p><button onclick="this.closest('div').parentNode.remove()" style="padding:10px 24px;background:#1a1917;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;">확인</button>';
+  overlay.appendChild(box);
+  overlay.addEventListener('click',function(e){if(e.target===this)this.remove();});
+  document.body.appendChild(overlay);
+}
+
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3200);}
 function delay(ms){return new Promise(r=>setTimeout(r,ms));}
 document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('active');}));
