@@ -172,17 +172,14 @@ tr:hover td{background:#fafaf6}
         <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="onFileSelect(this)">
       </div>
       <div class="card" id="previewCard" style="display:none">
-        <div class="preview-info">
-          <span class="preview-label" id="previewLabel"></span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">선택된 파일</div>
           <div style="display:flex;gap:8px">
             <button class="btn" onclick="resetUpload()">다시 선택</button>
             <button class="btn btn-dark" onclick="doAnalyze()">분석 시작 →</button>
           </div>
         </div>
-        <div class="table-wrap">
-          <table><thead><tr id="previewHead"></tr></thead><tbody id="previewBody"></tbody></table>
-        </div>
-        <p id="previewMore" style="font-size:12px;color:var(--text3);margin-top:8px"></p>
+        <div id="fileListWrap"></div>
       </div>
     </div>
 
@@ -483,49 +480,36 @@ function onFileSelect(input){if(input.files.length>0) handleFiles(input.files);}
 
 function handleFiles(files){
   selFiles=Array.from(files);
-  var f=selFiles[0];
-  var ext=f.name.split('.').pop().toLowerCase();
-  if(['xlsx','xls','csv'].indexOf(ext)<0){showToast('xlsx, xls, csv 파일만 지원합니다.');return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var rows;
-      if(ext==='csv'){
-        var lines=e.target.result.split('\n').filter(function(l){return l.trim();});
-        var hdrs=lines[0].split(',').map(function(h){return h.replace(/"/g,'').trim();});
-        rows=lines.slice(1).map(function(line){
-          var vals=line.split(',').map(function(v){return v.replace(/"/g,'').trim();});
-          var obj={};hdrs.forEach(function(h,i){obj[h]=vals[i]||'';});return obj;
-        });
-      } else {
-        var wb=XLSX.read(e.target.result,{type:'binary',cellDates:true});
-        var ws=wb.Sheets[wb.SheetNames[0]];
-        rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-      }
-      var lbl=selFiles.length>1?(selFiles.length+'개 파일 선택'):f.name;
-      showPreview(rows,lbl+' · '+rows.length+'건');
-    }catch(err){showToast('파일 읽기 오류: '+err.message);}
-  };
-  if(ext==='csv') reader.readAsText(f,'utf-8');
-  else reader.readAsBinaryString(f);
+  var invalid=selFiles.filter(function(f){
+    var ext=f.name.split('.').pop().toLowerCase();
+    return ['xlsx','xls','csv'].indexOf(ext)<0;
+  });
+  if(invalid.length){showToast('xlsx, xls, csv 파일만 지원합니다.');return;}
+  showFileList();
+}
+
+function showFileList(){
+  var wrap=document.getElementById('fileListWrap');
+  var totalSize=selFiles.reduce(function(s,f){return s+f.size;},0);
+  var sizeStr=totalSize>1024*1024?(totalSize/1024/1024).toFixed(1)+'MB':(totalSize/1024).toFixed(0)+'KB';
+  wrap.innerHTML='<div class="table-wrap"><table>'+
+    '<thead><tr><th>파일명</th><th style="width:80px;text-align:right">크기</th></tr></thead>'+
+    '<tbody>'+selFiles.map(function(f){
+      var sz=f.size>1024*1024?(f.size/1024/1024).toFixed(1)+'MB':(f.size/1024).toFixed(0)+'KB';
+      return '<tr><td>'+f.name+'</td><td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2)">'+sz+'</td></tr>';
+    }).join('')+'</tbody></table></div>'+
+    '<p style="font-size:12px;color:var(--text3);margin-top:8px">총 '+selFiles.length+'개 파일 · '+sizeStr+'</p>';
+  document.getElementById('previewCard').style.display='block';
 }
 
 function showPreview(rows,label){
-  if(!rows.length){showToast('데이터가 없습니다.');return;}
-  var keys=Object.keys(rows[0]).slice(0,6);
-  document.getElementById('previewLabel').textContent=label;
-  document.getElementById('previewHead').innerHTML=keys.map(function(k){return '<th>'+k+'</th>';}).join('');
-  document.getElementById('previewBody').innerHTML=rows.slice(0,5).map(function(r){
-    return '<tr>'+keys.map(function(k){return '<td>'+String(r[k]||'').slice(0,20)+'</td>';}).join('')+'</tr>';
-  }).join('');
-  var more=rows.length-5;
-  document.getElementById('previewMore').textContent=more>0?('... 외 '+more+'건'):'';
-  document.getElementById('previewCard').style.display='block';
+  // 더 이상 사용하지 않음 - showFileList로 대체
 }
 
 function resetUpload(){
   selFiles=[];
   document.getElementById('fileInput').value='';
+  document.getElementById('fileListWrap').innerHTML='';
   document.getElementById('previewCard').style.display='none';
 }
 
