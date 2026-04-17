@@ -8,7 +8,7 @@ from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
-app.permanent_session_lifetime = timedelta(hours=8)
+app.permanent_session_lifetime = timedelta(hours=24)
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -386,17 +386,115 @@ def change_own_password():
 
 SKIP_KEYWORDS = ['합계','소계','총계','총 계','총현금','*','**','경비','정산','이체','예금','현금','소계','계좌명','합 계']
 
+def parse_single_sheet(ws, header_keywords, SKIP_KEYWORDS):
+    """단일 시트에서 거래 데이터 추출"""
+    header_row = None
+    best_row = None
+    best_matches = 0
+    for i in range(1, min(60, ws.max_row+1)):
+        row_vals = [str(ws.cell(i,c).value or '') for c in range(1, min(20, ws.max_column+1))]
+        matches = sum(1 for k in header_keywords if any(k in v for v in row_vals))
+        if matches > best_matches:
+            best_matches = matches
+            best_row = i
+        if matches >= 5:
+            header_row = i
+            break
+    if not header_row and best_matches >= 3:
+        header_row = best_row
+    if not header_row:
+        return []
+
+    headers = {}
+    for c in range(1, ws.max_column+1):
+        val = str(ws.cell(header_row, c).value or '').strip()
+        if not val: continue
+        v = val.lower().replace(' ','')
+        if any(k in v for k in ['일자','date','날짜','거래일']): 
+            if 'date' not in headers.values(): headers[c] = 'date'
+        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주','거래처명']): 
+            if 'payee' not in headers.values(): headers[c] = 'payee'
+        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액','원화금액','지급금액']):
+            if 'amount' not in headers.values(): headers[c] = 'amount'
+        elif any(k in v for k in ['계좌번호','account','계좌']):
+            if 'account' not in headers.values(): headers[c] = 'account'
+        elif any(k in v for k in ['은행','bank']):
+            if 'bank' not in headers.values(): headers[c] = 'bank'
+        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용','계정과목']):
+            if 'memo' not in headers.values(): headers[c] = 'memo'
+
+    col_map = {}
+    used = set()
+    for c, field in headers.items():
+        if field not in used:
+            col_map[c] = field
+            used.add(field)
+
+    if 'payee' not in col_map.values():
+        for c in range(1, ws.max_column+1):
+            val = str(ws.cell(header_row, c).value or '').strip()
+            if val and c not in col_map:
+                col_map[c] = 'payee'
+                break
+
+    rows = []
+    for i in range(header_row+1, ws.max_row+1):
+        payee_col = next((c for c,f in col_map.items() if f=='payee'), None)
+        amt_col   = next((c for c,f in col_map.items() if f=='amount'), None)
+        if not payee_col: continue
+        payee_val = str(ws.cell(i, payee_col).value or '').strip()
+        amt_val   = ws.cell(i, amt_col).value if amt_col else None
+        if not payee_val: continue
+        if any(k in payee_val for k in SKIP_KEYWORDS): continue
+        if payee_val in ['거래처','수취인','업체명']: continue
+        try:
+            amt_num = float(re.sub(r'[^0-9.]', '', str(amt_val))) if amt_val else 0
+        except:
+            amt_num = 0
+        row = {'payee': payee_val}
+        for c, field in col_map.items():
+            val = ws.cell(i, c).value
+            if field == 'amount':
+                row['amount'] = amt_num
+            elif field == 'account':
+                bank_col = next((bc for bc,bf in col_map.items() if bf=='bank'), None)
+                bank = str(ws.cell(i, bank_col).value or '').strip() if bank_col else ''
+                acct = str(val or '').strip()
+                row['account'] = f"{bank} {acct}".strip() if bank else acct
+            elif field not in ['payee','bank']:
+                row[field] = str(val or '').strip()
+        rows.append(row)
+    return rows
+
+
 def smart_parse_excel(file_obj, filename):
-    """복잡한 엑셀 구조도 자동으로 파싱하는 스마트 파서"""
+    """복잡한 엑셀 구조도 자동으로 파싱하는 스마트 파서 - 모든 시트 지원"""
     import openpyxl
     from io import BytesIO
 
     file_obj.seek(0)
     wb = openpyxl.load_workbook(BytesIO(file_obj.read()), data_only=True, keep_vba=False)
-    ws = wb.active
 
-    # 헤더 행 자동 탐지 (키워드 매칭)
     header_keywords = ['거래처','수취인','금액','계좌','적요','계정','은행','날짜','일자','이체','거래처명','원화금액','계정과목','지급금액']
+
+    # 모든 시트에서 데이터 추출
+    all_rows = []
+    for sheet_name in wb.sheetnames:
+        try:
+            ws = wb[sheet_name]
+            if ws.max_row < 2: continue
+            rows = parse_single_sheet(ws, header_keywords, SKIP_KEYWORDS)
+            if rows:
+                for r in rows:
+                    r['_sheet'] = sheet_name
+                all_rows.extend(rows)
+        except Exception:
+            continue
+
+    return all_rows
+
+    # 아래 코드는 parse_single_sheet로 이동됨 (하위 호환성 유지)
+    ws = wb.active
     header_row = None
     best_row = None
     best_matches = 0
