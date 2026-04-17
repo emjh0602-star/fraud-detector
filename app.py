@@ -198,26 +198,41 @@ def upload():
     corp_name = corp["name"]
 
     # 여러 파일 합치기
-    all_dfs = []
+    all_rows = []
     for file in files:
         if file.filename == "": continue
         try:
             fname = file.filename.lower()
-            df = pd.read_csv(file, encoding="utf-8-sig") if fname.endswith(".csv") else pd.read_excel(file)
-            df = normalize_columns(df).fillna("")
-            # 어느 파일에서 왔는지 표시
-            df["_source_file"] = file.filename
-            all_dfs.append(df)
+            # 스마트 파서 먼저 시도 (xlsx/xls)
+            if fname.endswith(('.xlsx', '.xls')):
+                parsed = smart_parse_excel(file, file.filename)
+                if parsed:
+                    for r in parsed:
+                        r['_source_file'] = file.filename
+                    all_rows.extend(parsed)
+                else:
+                    # 스마트 파서 실패시 pandas로 폴백
+                    file.seek(0)
+                    df = pd.read_excel(file)
+                    df = normalize_columns(df).fillna("")
+                    df['_source_file'] = file.filename
+                    all_rows.extend([{k: str(v) if not isinstance(v,(int,float)) else v
+                                      for k,v in r.items()} for r in df.to_dict("records")])
+            else:
+                # CSV
+                df = pd.read_csv(file, encoding="utf-8-sig")
+                df = normalize_columns(df).fillna("")
+                df['_source_file'] = file.filename
+                all_rows.extend([{k: str(v) if not isinstance(v,(int,float)) else v
+                                  for k,v in r.items()} for r in df.to_dict("records")])
         except Exception as e:
             return jsonify({"error": f"파일 읽기 오류 ({file.filename}): {e}"}), 400
 
-    if not all_dfs:
-        return jsonify({"error": "읽을 수 있는 파일이 없습니다."}), 400
+    if not all_rows:
+        return jsonify({"error": "읽을 수 있는 데이터가 없습니다."}), 400
 
-    combined_df = pd.concat(all_dfs, ignore_index=True).fillna("")
-    rows = [{k: str(v) if not isinstance(v,(int,float)) else v for k,v in r.items()}
-            for r in combined_df.to_dict("records")]
-    file_count = len(all_dfs)
+    rows = all_rows
+    file_count = len(files)
 
     if file_type == "history":
         h = load_history(); h[corp_name] = rows; save_history(h)
@@ -353,15 +368,121 @@ def change_own_password():
     return jsonify({"ok": True, "message": "비밀번호가 변경되었습니다."})
 
 # ── 분석 로직 ──────────────────────────────────────────
+
+SKIP_KEYWORDS = ['합계','소계','총계','총 계','총현금','*','**','경비','정산','이체','예금','현금','소계','계좌명','합 계']
+
+def smart_parse_excel(file_obj, filename):
+    """복잡한 엑셀 구조도 자동으로 파싱하는 스마트 파서"""
+    import openpyxl
+    from io import BytesIO
+
+    file_obj.seek(0)
+    wb = openpyxl.load_workbook(BytesIO(file_obj.read()), data_only=True)
+    ws = wb.active
+
+    # 헤더 행 자동 탐지 (키워드 매칭)
+    header_keywords = ['거래처','수취인','금액','계좌','적요','계정','은행','날짜','일자','이체']
+    header_row = None
+    for i in range(1, min(20, ws.max_row+1)):
+        row_vals = [str(ws.cell(i,c).value or '') for c in range(1, min(20, ws.max_column+1))]
+        matches = sum(1 for k in header_keywords if any(k in v for v in row_vals))
+        if matches >= 2:
+            header_row = i
+            break
+
+    if not header_row:
+        # 헤더 못 찾으면 첫 번째 행을 헤더로 사용
+        header_row = 1
+
+    # 헤더 컬럼 매핑
+    headers = {}
+    for c in range(1, ws.max_column+1):
+        val = str(ws.cell(header_row, c).value or '').strip()
+        if not val: continue
+        v = val.lower().replace(' ','')
+        if any(k in v for k in ['일자','date','날짜','거래일']): headers[c] = 'date'
+        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주']): 
+            if 'date' not in headers.values(): headers[c] = 'payee'
+            elif 'payee' not in headers.values(): headers[c] = 'payee'
+            else: headers[c] = 'payee'
+        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액']):
+            if 'amount' not in headers.values(): headers[c] = 'amount'
+        elif any(k in v for k in ['계좌번호','account','계좌']):
+            if 'account' not in headers.values(): headers[c] = 'account'
+        elif any(k in v for k in ['은행','bank']):
+            if 'bank' not in headers.values(): headers[c] = 'bank'
+        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용']):
+            if 'memo' not in headers.values(): headers[c] = 'memo'
+
+    # 역방향 매핑 (첫번째 매칭만 사용)
+    col_map = {}
+    used = set()
+    for c, field in headers.items():
+        if field not in used:
+            col_map[c] = field
+            used.add(field)
+
+    # 수취인 컬럼이 없으면 두 번째로 긴 텍스트 컬럼 추정
+    if 'payee' not in col_map.values():
+        for c in range(1, ws.max_column+1):
+            val = str(ws.cell(header_row, c).value or '').strip()
+            if val and c not in col_map:
+                col_map[c] = 'payee'
+                break
+
+    # 데이터 추출 (합계/섹션 제목 행 건너뜀)
+    rows = []
+    for i in range(header_row+1, ws.max_row+1):
+        # 수취인 컬럼 확인
+        payee_col = next((c for c,f in col_map.items() if f=='payee'), None)
+        amt_col   = next((c for c,f in col_map.items() if f=='amount'), None)
+
+        payee_val = str(ws.cell(i, payee_col).value or '').strip() if payee_col else ''
+        amt_val   = ws.cell(i, amt_col).value if amt_col else None
+
+        if not payee_val: continue
+        # 합계/섹션 행 건너뜀
+        if any(k in payee_val for k in SKIP_KEYWORDS): continue
+        if payee_val in ['거래처','수취인','업체명']: continue
+
+        # 금액 검증 (숫자여야 함)
+        try:
+            amt_num = float(re.sub(r'[^0-9.]', '', str(amt_val))) if amt_val else 0
+        except:
+            amt_num = 0
+
+        row = {'payee': payee_val}
+        for c, field in col_map.items():
+            val = ws.cell(i, c).value
+            if field == 'amount':
+                row['amount'] = amt_num
+            elif field == 'account':
+                # 계좌번호: 은행명과 합치기
+                bank_col = next((bc for bc,bf in col_map.items() if bf=='bank'), None)
+                bank = str(ws.cell(i, bank_col).value or '').strip() if bank_col else ''
+                acct = str(val or '').strip()
+                row['account'] = f"{bank} {acct}".strip() if bank else acct
+            elif field not in ['payee','bank']:
+                row[field] = str(val or '').strip()
+
+        rows.append(row)
+
+    return rows
+
 def normalize_columns(df):
+    """기존 pandas DataFrame 방식 - 단순 구조 엑셀용"""
     col_map = {}
     for col in df.columns:
         c = str(col).strip().lower().replace(" ","")
         if any(k in c for k in ["일자","date","날짜","거래일"]): col_map[col]="date"
-        elif any(k in c for k in ["수취인","payee","받는","거래처","상대방","입금처"]): col_map[col]="payee"
-        elif any(k in c for k in ["금액","amount","amt","지급액","출금","이체금액"]): col_map[col]="amount"
-        elif any(k in c for k in ["계좌","account","은행","bank","계좌번호"]): col_map[col]="account"
-        elif any(k in c for k in ["적요","memo","내용","비고","remark","거래내용"]): col_map[col]="memo"
+        elif any(k in c for k in ["수취인","payee","받는","거래처","상대방","입금처","업체","예금주"]): 
+            if "payee" not in col_map.values(): col_map[col]="payee"
+        elif any(k in c for k in ["금액","amount","amt","지급액","출금","이체금액"]):
+            if "amount" not in col_map.values(): col_map[col]="amount"
+        elif any(k in c for k in ["계좌번호","계좌","account","bank","은행"]):
+            if "account" not in col_map.values(): col_map[col]="account"
+        elif any(k in c for k in ["적요","memo","내용","비고","remark","거래내용","계정","비용구분"]):
+            if "memo" not in col_map.values(): col_map[col]="memo"
     return df.rename(columns=col_map)
 
 def clean_amount(val):
