@@ -209,6 +209,7 @@ tr:hover td{background:#fafaf6}
           <button class="btn" onclick="doExport()">CSV 내보내기</button>
         </div>
         <div class="metrics-grid" id="metricsGrid"></div>
+        <div id="patternStats"></div>
         <div class="card" id="alertCard" style="display:none">
           <div class="card-title">이상 · 주의 거래 목록</div>
           <div class="table-wrap"><table>
@@ -559,6 +560,23 @@ function renderResult(data){
     '<div class="metric-card warning"><div class="m-label">주의 거래</div><div class="m-value">'+data.warning+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>'+
     '<div class="metric-card ok"><div class="m-label">정상 거래</div><div class="m-value">'+data.ok+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>'+
     '<div class="metric-card"><div class="m-label">총 금액</div><div class="m-value" style="font-size:22px">'+amtB+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">억원</div></div>';
+
+  // 패턴 통계 카드
+  var ps = data.pattern_stats;
+  var patternHtml = '';
+  if(ps && ps.avg_per_tx){
+    var fmtAmt = function(n){ return n >= 1e8 ? (n/1e8).toFixed(1)+'억' : n >= 1e4 ? Math.round(n/1e4)+'만' : Math.round(n).toLocaleString(); };
+    patternHtml = '<div class="card" style="margin-bottom:18px">'+
+      '<div class="card-title">법인 지급 패턴 (과거 데이터 기준)</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
+      '<div class="metric-card"><div class="m-label">건당 평균</div><div class="m-value" style="font-size:20px">'+fmtAmt(ps.avg_per_tx)+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">원</div></div>'+
+      (ps.avg_daily ? '<div class="metric-card"><div class="m-label">일평균 지급</div><div class="m-value" style="font-size:20px">'+fmtAmt(ps.avg_daily)+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">원 / '+ps.days_count+'일</div></div>' : '')+
+      (ps.avg_monthly ? '<div class="metric-card"><div class="m-label">월평균 지급</div><div class="m-value" style="font-size:20px">'+fmtAmt(ps.avg_monthly)+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">원 / '+ps.months_count+'개월</div></div>' : '')+
+      '<div class="metric-card"><div class="m-label">최대 단건</div><div class="m-value" style="font-size:20px">'+fmtAmt(ps.max_single)+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">원</div></div>'+
+      '<div class="metric-card"><div class="m-label">학습 건수</div><div class="m-value" style="font-size:20px">'+ps.total_count+'</div><div style="font-size:10px;color:var(--text3);margin-top:3px">건</div></div>'+
+      '</div></div>';
+  }
+  document.getElementById('patternStats').innerHTML = patternHtml;
   var alerts=data.results.filter(function(r){return r.risk!=='정상';});
   var ac=document.getElementById('alertCard');
   if(alerts.length){

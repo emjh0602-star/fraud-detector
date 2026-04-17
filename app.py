@@ -293,6 +293,7 @@ def upload():
         "ok": sum(1 for r in results if r["risk"]=="정상"),
         "total_amount": sum(r["amount_clean"] for r in results),
         "analyzed_by": session["name"],
+        "pattern_stats": pattern_stats,
         "results": results
     }
     saved_results[corp_name].insert(0, entry)
@@ -309,6 +310,7 @@ def upload():
         "total_amount": sum(r["amount_clean"] for r in results),
         "has_history": bool(h.get(corp_name)),
         "cumul_payees": len(h[cumul_key]),
+        "pattern_stats": pattern_stats,
         "results": results,
         "analyzed_by": session["name"]
     })
@@ -658,6 +660,70 @@ def clean_amount(val):
     try: return float(s)
     except: return 0.0
 
+def calc_pattern_stats(all_history):
+    """과거 데이터로 월평균/일평균 지급 패턴 계산"""
+    if not all_history:
+        return {}
+    
+    hist_amounts = [a for a in (clean_amount(r.get("amount",0)) for r in all_history) if a>0]
+    if not hist_amounts:
+        return {}
+    
+    # 날짜별 그룹핑
+    date_groups = defaultdict(list)
+    month_groups = defaultdict(list)
+    
+    for r in all_history:
+        amt = clean_amount(r.get("amount",0))
+        if amt <= 0: continue
+        date_str = str(r.get("date","")).strip()
+        if date_str and date_str not in ["", "None", "nan"]:
+            try:
+                # 날짜 파싱 시도
+                from datetime import datetime as dt
+                for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%Y.%m.%d"]:
+                    try:
+                        d = dt.strptime(date_str[:10], fmt)
+                        date_groups[d.strftime("%Y-%m-%d")].append(amt)
+                        month_groups[d.strftime("%Y-%m")].append(amt)
+                        break
+                    except: pass
+            except: pass
+    
+    total_amt = sum(hist_amounts)
+    avg_per_tx = np.mean(hist_amounts)
+    
+    # 일평균 (날짜 데이터 있을 때)
+    if date_groups:
+        daily_totals = [sum(v) for v in date_groups.values()]
+        avg_daily = np.mean(daily_totals)
+        days_count = len(date_groups)
+    else:
+        avg_daily = None
+        days_count = len(all_history)
+    
+    # 월평균 (월 데이터 있을 때)
+    if month_groups:
+        monthly_totals = [sum(v) for v in month_groups.values()]
+        avg_monthly = np.mean(monthly_totals)
+        months_count = len(month_groups)
+    else:
+        avg_monthly = None
+        months_count = None
+    
+    return {
+        "total_amount": total_amt,
+        "total_count": len(hist_amounts),
+        "avg_per_tx": avg_per_tx,
+        "avg_daily": avg_daily,
+        "days_count": days_count,
+        "avg_monthly": avg_monthly,
+        "months_count": months_count,
+        "max_single": max(hist_amounts),
+        "p95": float(np.percentile(hist_amounts, 95)) if len(hist_amounts) >= 2 else max(hist_amounts),
+    }
+
+
 def analyze_transactions(rows, corp_name, history):
     corp_history = history.get(corp_name, [])
     cumul_key    = corp_name + "__cumul__"
@@ -670,6 +736,9 @@ def analyze_transactions(rows, corp_name, history):
 
     avg_amt = np.mean(hist_amounts) if hist_amounts else 0
     p95_amt = np.percentile(hist_amounts,95) if hist_amounts else 0
+    
+    # 패턴 통계 계산
+    pattern_stats = calc_pattern_stats(all_history)
 
     payee_count, amount_count = defaultdict(int), defaultdict(int)
     for r in rows:
