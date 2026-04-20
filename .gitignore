@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.claude/
+법인데이터(추후삭제)/
+data/
+*.log
+.env

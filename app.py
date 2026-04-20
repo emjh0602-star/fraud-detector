@@ -151,6 +151,14 @@ def get_corps():
     else:
         return jsonify([c for c in corps if c.get("manager") == uid])
 
+@app.route("/api/corporations", methods=["GET"])
+@login_required
+def get_corporations_with_history():
+    """학습 데이터(history.json)가 등록된 법인명 목록"""
+    h = load_history()
+    names = sorted({k.replace("__cumul__","") for k in h.keys() if h.get(k)})
+    return jsonify({"corporations": names})
+
 @app.route("/api/corps", methods=["POST"])
 @login_required
 @admin_required
@@ -301,7 +309,8 @@ def upload():
         for r in existing_cumul
     }
     new_rows = [{"payee": r.get("payee",""), "amount": r.get("amount",""),
-                 "account": r.get("account",""), "date": r.get("date","")}
+                 "account": r.get("account",""), "date": r.get("date",""),
+                 "category": r.get("category",""), "memo": r.get("memo","")}
                 for r in rows if r.get("payee","") and
                 (r.get("payee",""), str(r.get("amount","")), r.get("date","")) not in existing_keys]
     h[cumul_key] = existing_cumul + new_rows
@@ -481,6 +490,48 @@ def change_own_password():
 
 SKIP_KEYWORDS = ['합계','소계','총계','총 계','총현금','*','**','경비','정산','이체','예금','현금','소계','계좌명','합 계']
 
+# 필드별 헤더 키워드 (12개 법인 관찰 기반)
+# 대웅그룹 표준: 하나누리/엠서클/페이지원/HCC/힐리언스/IDS
+# 비표준: 더편한샵/디엔/아이엔/대웅이엔지/대웅펫/노바메디텍
+FIELD_KEYWORDS = {
+    'date':     ['일자','date','날짜','거래일'],
+    'payee':    ['거래처','거래처명','예금주','예금주명','수취인','받는','받는분','상대방',
+                 '입금처','업체','업체명','이체받는자','payee'],
+    'category': ['계정','계정과목','계정과목명','비목','과목','비용구분','분류','세부계정'],
+    'amount':   ['금액','원화금액','지급금액','송금금액','지급액','출금','이체금액',
+                 '비용','amount','amt'],
+    'account':  ['계좌번호','수취계좌번호','입금계좌','계좌','account'],
+    'bank':     ['은행','수취은행','입금은행','bank'],
+    'memo':     ['적요','비고','내용','사유','거래내용','지출내용','목적','remark','memo'],
+}
+# 매핑 우선순위 (더 구체적인 필드를 먼저 매칭해야 오매핑 방지)
+_FIELD_PRIORITY = ['date','category','amount','account','bank','payee','memo']
+
+
+def _map_header_row(ws, row_idx):
+    """헤더 행에서 컬럼 → 필드 매핑 추출"""
+    col_map = {}
+    used = set()
+    for c in range(1, ws.max_column+1):
+        raw = str(ws.cell(row_idx, c).value or '').strip()
+        if not raw: continue
+        v = raw.lower().replace(' ','')
+        for field in _FIELD_PRIORITY:
+            if field in used: continue
+            if any(k in v for k in FIELD_KEYWORDS[field]):
+                col_map[c] = field
+                used.add(field)
+                break
+    return col_map
+
+
+def _is_header_row(ws, row_idx, header_keywords, min_matches=4):
+    """해당 행이 헤더 행인지 판정 (섹션별 재헤더 감지용)"""
+    row_vals = [str(ws.cell(row_idx, c).value or '') for c in range(1, min(20, ws.max_column+1))]
+    matches = sum(1 for k in header_keywords if any(k in v for v in row_vals))
+    return matches >= min_matches
+
+
 def parse_single_sheet(ws, header_keywords, SKIP_KEYWORDS):
     """단일 시트에서 거래 데이터 추출"""
     header_row = None
@@ -500,30 +551,7 @@ def parse_single_sheet(ws, header_keywords, SKIP_KEYWORDS):
     if not header_row:
         return []
 
-    headers = {}
-    for c in range(1, ws.max_column+1):
-        val = str(ws.cell(header_row, c).value or '').strip()
-        if not val: continue
-        v = val.lower().replace(' ','')
-        if any(k in v for k in ['일자','date','날짜','거래일']): 
-            if 'date' not in headers.values(): headers[c] = 'date'
-        elif any(k in v for k in ['수취인','거래처','payee','받는','상대방','입금처','업체','예금주','거래처명']): 
-            if 'payee' not in headers.values(): headers[c] = 'payee'
-        elif any(k in v for k in ['금액','amount','지급액','출금','이체금액','원화금액','지급금액']):
-            if 'amount' not in headers.values(): headers[c] = 'amount'
-        elif any(k in v for k in ['계좌번호','account','계좌']):
-            if 'account' not in headers.values(): headers[c] = 'account'
-        elif any(k in v for k in ['은행','bank']):
-            if 'bank' not in headers.values(): headers[c] = 'bank'
-        elif any(k in v for k in ['적요','memo','내용','비고','remark','거래내용','계정','비용','계정과목']):
-            if 'memo' not in headers.values(): headers[c] = 'memo'
-
-    col_map = {}
-    used = set()
-    for c, field in headers.items():
-        if field not in used:
-            col_map[c] = field
-            used.add(field)
+    col_map = _map_header_row(ws, header_row)
 
     if 'payee' not in col_map.values():
         for c in range(1, ws.max_column+1):
@@ -533,32 +561,52 @@ def parse_single_sheet(ws, header_keywords, SKIP_KEYWORDS):
                 break
 
     rows = []
-    for i in range(header_row+1, ws.max_row+1):
+    i = header_row + 1
+    while i <= ws.max_row:
+        # 섹션 헤더 재탐색: 한 시트 내 섹션별 헤더가 여러 번 등장하는 경우 대응 (더편한샵)
+        if _is_header_row(ws, i, header_keywords, min_matches=4):
+            new_map = _map_header_row(ws, i)
+            if new_map and 'payee' in new_map.values() and 'amount' in new_map.values():
+                col_map = new_map
+                i += 1
+                continue
+
         payee_col = next((c for c,f in col_map.items() if f=='payee'), None)
         amt_col   = next((c for c,f in col_map.items() if f=='amount'), None)
-        if not payee_col: continue
+        if not payee_col:
+            i += 1
+            continue
         payee_val = str(ws.cell(i, payee_col).value or '').strip()
         amt_val   = ws.cell(i, amt_col).value if amt_col else None
-        if not payee_val: continue
-        if any(k in payee_val for k in SKIP_KEYWORDS): continue
-        if payee_val in ['거래처','수취인','업체명']: continue
         try:
-            amt_num = float(re.sub(r'[^0-9.]', '', str(amt_val))) if amt_val else 0
+            amt_num = float(re.sub(r'[^0-9.]', '', str(amt_val))) if amt_val not in (None,'') else 0
         except:
             amt_num = 0
-        row = {'payee': payee_val}
+
+        # 스킵 규칙: 거래처 빈칸 OR 금액 0 (소계/합계/빈행 일괄 처리)
+        if not payee_val or amt_num == 0:
+            i += 1
+            continue
+        if any(k in payee_val for k in SKIP_KEYWORDS):
+            i += 1
+            continue
+        if payee_val in ['거래처','수취인','업체명','예금주','거래처명']:
+            i += 1
+            continue
+
+        row = {'payee': payee_val, 'amount': amt_num}
         for c, field in col_map.items():
+            if field in ('payee','amount','bank'): continue
             val = ws.cell(i, c).value
-            if field == 'amount':
-                row['amount'] = amt_num
-            elif field == 'account':
+            if field == 'account':
                 bank_col = next((bc for bc,bf in col_map.items() if bf=='bank'), None)
                 bank = str(ws.cell(i, bank_col).value or '').strip() if bank_col else ''
                 acct = str(val or '').strip()
                 row['account'] = f"{bank} {acct}".strip() if bank else acct
-            elif field not in ['payee','bank']:
+            else:
                 row[field] = str(val or '').strip()
         rows.append(row)
+        i += 1
     return rows
 
 
@@ -570,7 +618,13 @@ def smart_parse_excel(file_obj, filename):
     file_obj.seek(0)
     wb = openpyxl.load_workbook(BytesIO(file_obj.read()), data_only=True, keep_vba=False)
 
-    header_keywords = ['거래처','수취인','금액','계좌','적요','계정','은행','날짜','일자','이체','거래처명','원화금액','계정과목','지급금액']
+    header_keywords = ['거래처','거래처명','예금주','예금주명','업체명','이체받는자','수취인',
+                       '비목','계정','계정과목','계정과목명','분류','세부계정','비용구분',
+                       '금액','원화금액','지급금액','송금금액','비용',
+                       '적요','비고','내용','지출내용',
+                       '계좌','계좌번호','수취계좌번호','입금계좌',
+                       '은행','은행명','수취은행','입금은행',
+                       '날짜','일자','거래일','기안자']
 
     # 모든 시트에서 데이터 추출
     all_rows = []
@@ -591,17 +645,15 @@ def smart_parse_excel(file_obj, filename):
 def normalize_columns(df):
     """기존 pandas DataFrame 방식 - 단순 구조 엑셀용"""
     col_map = {}
+    used = set()
     for col in df.columns:
         c = str(col).strip().lower().replace(" ","")
-        if any(k in c for k in ["일자","date","날짜","거래일"]): col_map[col]="date"
-        elif any(k in c for k in ["수취인","payee","받는","거래처","상대방","입금처","업체","예금주"]): 
-            if "payee" not in col_map.values(): col_map[col]="payee"
-        elif any(k in c for k in ["금액","amount","amt","지급액","출금","이체금액"]):
-            if "amount" not in col_map.values(): col_map[col]="amount"
-        elif any(k in c for k in ["계좌번호","계좌","account","bank","은행"]):
-            if "account" not in col_map.values(): col_map[col]="account"
-        elif any(k in c for k in ["적요","memo","내용","비고","remark","거래내용","계정","비용구분"]):
-            if "memo" not in col_map.values(): col_map[col]="memo"
+        for field in _FIELD_PRIORITY:
+            if field in used or field == 'bank': continue
+            if any(k in c for k in FIELD_KEYWORDS[field]):
+                col_map[col] = field
+                used.add(field)
+                break
     return df.rename(columns=col_map)
 
 def clean_amount(val):
